@@ -1,0 +1,4 @@
+/target
+*.uf2
+.DS_Store
+os/secrets.toml

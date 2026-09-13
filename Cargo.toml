@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = ["os", "gfx", "proto"]
+default-members = ["os"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[profile.release]
+codegen-units = 1
+debug = 2          # keep symbols in the ELF; they never reach the flash image
+lto = "fat"
+opt-level = 3
+overflow-checks = false
+
+[profile.dev]
+codegen-units = 1
+debug = 2
+lto = "fat"
+opt-level = "s"    # unoptimised Cortex-M0+ code is too slow and too large to be useful
+overflow-checks = true

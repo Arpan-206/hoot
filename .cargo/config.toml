@@ -1,0 +1,23 @@
+[build]
+# The Sprig's RP2040 is a Cortex-M0+.
+target = "thumbv6m-none-eabi"
+
+[target.thumbv6m-none-eabi]
+# `cargo run` flashes a Sprig in BOOTSEL mode over USB with picotool and
+# starts the program. picotool talks to the boot ROM directly. It does not
+# use the RPI-RP2 drive, which hangs on recent macOS (FSKit msdos driver).
+# Install with `brew install picotool`.
+runner = "tools/flash.sh"
+rustflags = [
+  "-C", "link-arg=--nmagic",
+  "-C", "link-arg=-Tlink.x",
+  "-C", "link-arg=-Tlink-rp.x",
+]
+
+[alias]
+# Pico W builds: same firmware plus the Wi-Fi stack.
+build-w = "build --release -p sprig-os --features wifi"
+run-w = "run --release -p sprig-os --features wifi"
+# Host-side unit tests for the hardware-free crates.
+# Change the target triple if you are not on Apple Silicon.
+host-test = "test -p sprig-gfx -p sprig-proto --target aarch64-apple-darwin"

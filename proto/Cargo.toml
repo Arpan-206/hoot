@@ -1,0 +1,11 @@
+[package]
+name = "sprig-proto"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+description = "Protocol helpers for Sprig OS: URL parsing, HTTP/1.1 response parsing, CRC-32, config records. No hardware, no allocation."
+
+[lib]
+bench = false
+
+[dependencies]
