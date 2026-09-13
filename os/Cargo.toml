@@ -15,10 +15,12 @@ cortex-m = { version = "0.7.9", features = ["inline-asm"] }
 cortex-m-rt = "0.7.6"
 cyw43 = { version = "0.7.0", optional = true }
 cyw43-pio = { version = "0.10.0", optional = true }
+embassy-boot-rp = "0.10.0"
+embassy-embedded-hal = "0.6.0"
 embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread"] }
 embassy-futures = { version = "0.1.2", optional = true }
 embassy-net = { version = "0.9.1", features = ["proto-ipv4", "tcp", "udp", "dhcpv4", "dns", "medium-ethernet"], optional = true }
-embassy-rp = { version = "0.10.0", features = ["rp2040", "time-driver", "critical-section-impl", "boot2-w25q080"] }
+embassy-rp = { version = "0.10.0", features = ["rp2040", "time-driver", "critical-section-impl", "boot2-none"] }
 embassy-sync = "0.8.0"
 embassy-time = "0.5.1"
 embassy-usb = "0.6.0"
@@ -26,6 +28,7 @@ embassy-usb-logger = "0.6.0"
 embedded-hal = "1.0.0"
 embedded-hal-async = "1.0.0"
 embedded-io-async = { version = "0.7.0", optional = true }
+embedded-storage = "0.3.1"
 log = "0.4.34"
 portable-atomic = { version = "1.15.0", features = ["critical-section"] }
 qrcodegen-no-heap = { version = "1.8.1", optional = true }

@@ -11,11 +11,14 @@
 #[macro_use]
 mod logging;
 
+#[cfg(feature = "wifi")]
+mod agent;
 mod apps;
 mod board;
 mod drivers;
 mod hw;
 mod net;
+mod ota;
 mod panic;
 mod storage;
 mod ui;
@@ -39,6 +42,7 @@ use static_cell::{ConstStaticCell, StaticCell};
 use crate::apps::Ctx;
 use crate::drivers::dimmer::Dimmer;
 use crate::drivers::input::Input;
+use crate::drivers::power::PowerStatus;
 use crate::drivers::module::{self, Module};
 use crate::drivers::power::Power;
 use crate::drivers::st7735::St7735;
@@ -61,6 +65,55 @@ static DISPLAY: StaticCell<Display> = StaticCell::new();
 const FRAME_MS: u64 = 16;
 /// Reboot if the shell loop stalls for this long.
 const WATCHDOG: Duration = Duration::from_millis(3_000);
+/// After running this long, tell the boot loader the firmware is good.
+const CONFIRM_BOOT_MS: u32 = 20_000;
+/// How often the power reading is refreshed.
+const POWER_POLL_MS: u32 = 500;
+/// Battery saver: dim the backlight after this long without a key press.
+const DIM_AFTER_MS: u32 = 30_000;
+/// Battery saver: dimmed brightness as a share of the user's setting.
+const DIM_PERCENT: u32 = 30;
+const DIM_MIN: u8 = 8;
+
+/// Battery saver decision from the stored mode and the power reading.
+fn saver_active(mode: u8, power: &PowerStatus) -> bool {
+    match mode {
+        sprig_proto::record::POWER_SAVER => true,
+        sprig_proto::record::POWER_NORMAL => false,
+        _ => power.usb_known && !power.usb,
+    }
+}
+
+/// Dims the backlight when idle in battery saver mode, and restores it on
+/// the first key press, which is swallowed so no app acts on it.
+struct IdleDimmer {
+    last_input_ms: u32,
+    dimmed: bool,
+    user_level: u8,
+}
+
+impl IdleDimmer {
+    fn update(&mut self, input: &mut Input, hw: &mut Hardware, saver: bool, now: u32) {
+        if input.held_mask() != 0 {
+            self.last_input_ms = now;
+            if self.dimmed {
+                self.dimmed = false;
+                hw.backlight.set(self.user_level);
+                input.swallow();
+            }
+            return;
+        }
+        if self.dimmed && !saver {
+            self.dimmed = false;
+            hw.backlight.set(self.user_level);
+        } else if saver && !self.dimmed && now.wrapping_sub(self.last_input_ms) >= DIM_AFTER_MS {
+            self.user_level = hw.backlight.level();
+            let dim = (self.user_level as u32 * DIM_PERCENT / 100) as u8;
+            hw.backlight.set(dim.max(DIM_MIN));
+            self.dimmed = true;
+        }
+    }
+}
 /// A DMA frame takes about 11 ms. Longer means the transfer is stuck.
 const FRAME_DMA_TIMEOUT: Duration = Duration::from_millis(100);
 
@@ -218,6 +271,10 @@ async fn main(spawner: Spawner) {
         display_dma: dma_ok,
     };
     let mut shell = Shell::new(has_radio);
+    // The OS agent keeps the device serviceable from the server whatever
+    // app is on screen: heartbeat, warnings, commands, updates.
+    #[cfg(feature = "wifi")]
+    let mut agent = agent::Agent::new(module.name());
 
     let mut watchdog = Watchdog::new(p.WATCHDOG);
     watchdog.start(WATCHDOG);
@@ -225,10 +282,31 @@ async fn main(spawner: Spawner) {
 
     let mut ticker = Ticker::every(Duration::from_millis(FRAME_MS));
     let mut frame_ms = 0u32;
+    let mut boot_confirmed = false;
+    let mut power = hw.power.read();
+    let mut next_power_ms = 0u32;
+    let mut idle = IdleDimmer { last_input_ms: 0, dimmed: false, user_level: 255 };
     loop {
         let start = Instant::now();
         let now_ms = start.as_millis() as u32;
+        if !boot_confirmed && now_ms >= CONFIRM_BOOT_MS {
+            boot_confirmed = true;
+            ota::confirm_boot(flash);
+        }
+        if now_ms.wrapping_sub(next_power_ms) < u32::MAX / 2 {
+            power = hw.power.read();
+            // A Pico W cannot see VBUS itself; the radio chip can.
+            if !power.usb_known && let Some(usb) = net.usb_power() {
+                power.usb = usb;
+                power.usb_known = true;
+            }
+            next_power_ms = now_ms.wrapping_add(POWER_POLL_MS);
+        }
+        let saver = saver_active(store.config().power_mode, &power);
         input.poll(now_ms);
+        idle.update(&mut input, &mut hw, saver, now_ms);
+        #[cfg(feature = "wifi")]
+        agent.update(&mut net, &mut store, now_ms, shell.current_app(), saver);
         {
             let mut ctx = Ctx {
                 fb: &mut *fb,
@@ -236,6 +314,8 @@ async fn main(spawner: Spawner) {
                 hw: &mut hw,
                 net: &mut net,
                 store: &mut store,
+                power,
+                saver,
                 now_ms,
                 frame_ms,
             };

@@ -1,7 +1,16 @@
-/* Memory layout of the Raspberry Pi Pico module on the Sprig: 2 MiB flash, 264 KiB RAM.
-   The .boot2 section is placed by embassy-rp's link-rp.x. */
-MEMORY {
-    BOOT2 : ORIGIN = 0x10000000, LENGTH = 0x100
-    FLASH : ORIGIN = 0x10000100, LENGTH = 2048K - 0x100
-    RAM   : ORIGIN = 0x20000000, LENGTH = 264K
+/* Sprig flash map, OS view. Must match boot/memory.x and src/board.rs.
+   The OS lives in the active partition. The boot loader owns the first
+   28 KiB and the update partition. See board::flash_map for the rest. */
+MEMORY
+{
+  BOOT2            : ORIGIN = 0x10000000, LENGTH = 0x100
+  BOOTLOADER_STATE : ORIGIN = 0x10006000, LENGTH = 4K
+  FLASH            : ORIGIN = 0x10007000, LENGTH = 640K
+  DFU              : ORIGIN = 0x100A7000, LENGTH = 644K
+  RAM              : ORIGIN = 0x20000000, LENGTH = 264K
 }
+
+__bootloader_state_start = ORIGIN(BOOTLOADER_STATE) - ORIGIN(BOOT2);
+__bootloader_state_end = ORIGIN(BOOTLOADER_STATE) + LENGTH(BOOTLOADER_STATE) - ORIGIN(BOOT2);
+__bootloader_dfu_start = ORIGIN(DFU) - ORIGIN(BOOT2);
+__bootloader_dfu_end = ORIGIN(DFU) + LENGTH(DFU) - ORIGIN(BOOT2);

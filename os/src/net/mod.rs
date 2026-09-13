@@ -5,8 +5,11 @@
 //! in [`wifi`] does the work. The same request/poll shape will be exposed
 //! to WASM apps later, which is why nothing here is async.
 //!
-//! One fetch runs at a time. Large bodies stream straight into a blob slot
-//! in flash, so a 40 KiB photo costs 4 KiB of RAM, not 40.
+//! Requests travel on two lanes: `App` for the app on screen and `System`
+//! for the OS agent (heartbeat, warnings, updates), so an app can never
+//! block the device from being serviced. One request per lane at a time.
+//! Large bodies stream straight into a blob slot in flash, so a 40 KiB
+//! photo costs 4 KiB of RAM, not 40.
 //!
 //! The service only exists with the `wifi` Cargo feature. Without it the
 //! handle reports `NoRadio` and every fetch fails with `NoNetwork`, so apps
@@ -58,6 +61,8 @@ pub enum NetState {
     Lost,
     /// Running the setup hotspot and captive portal.
     Portal,
+    /// Pico W, but the radio firmware partition is empty.
+    NoRadioFirmware,
 }
 
 impl NetState {
@@ -72,6 +77,7 @@ impl NetState {
             NetState::JoinFailed => "Join failed",
             NetState::Lost => "Lost",
             NetState::Portal => "Setup mode",
+            NetState::NoRadioFirmware => "No radio fw",
         }
     }
 
@@ -87,6 +93,17 @@ pub enum Sink {
     Blob { slot: u8, kind: u32 },
     /// Keep up to `SMALL_BODY_MAX` bytes in RAM. Read with `small_body`.
     Small,
+    /// Stream a firmware image into the update partition and mark it.
+    Firmware,
+}
+
+/// What to send with the request.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Body {
+    /// Plain GET.
+    None,
+    /// POST the warnings collected since the last post, as text lines.
+    RecentWarnings,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -94,7 +111,16 @@ pub struct FetchRequest {
     pub url: FixedStr<128>,
     /// Empty means no `If-Modified-Since` header.
     pub if_modified_since: FixedStr<40>,
+    /// Extra header lines, each ending in `\r\n`. Used for the heartbeat.
+    pub headers: FixedStr<192>,
+    pub body: Body,
     pub sink: Sink,
+}
+
+impl FetchRequest {
+    pub fn get(url: FixedStr<128>, sink: Sink) -> Self {
+        Self { url, if_modified_since: FixedStr::new(), headers: FixedStr::new(), body: Body::None, sink }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -105,6 +131,8 @@ pub struct FetchResult {
     pub last_modified: FixedStr<40>,
     /// CRC-32 of the stored body when the sink was a blob slot.
     pub crc32: u32,
+    /// `X-Sprig-Command` from the server, or empty.
+    pub command: FixedStr<16>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -119,6 +147,8 @@ pub enum FetchError {
     Chunked,
     TooLarge,
     Storage,
+    /// The updater refused: not booted, or the image did not fit.
+    Update,
 }
 
 impl FetchError {
@@ -134,6 +164,7 @@ impl FetchError {
             FetchError::Chunked => "chunked reply",
             FetchError::TooLarge => "too large",
             FetchError::Storage => "flash error",
+            FetchError::Update => "update failed",
         }
     }
 }
@@ -157,6 +188,14 @@ pub enum JobState {
 
 pub const SMALL_BODY_MAX: usize = 512;
 
+/// Who a request belongs to.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Lane {
+    App = 0,
+    System = 1,
+}
+const LANES: usize = 2;
+
 /// State shared between the handle (shell task) and the Wi-Fi task.
 pub struct Shared {
     pub state: NetState,
@@ -169,10 +208,13 @@ pub struct Shared {
     /// Photo server and frame name, shown as defaults on the portal page.
     pub server: FixedStr<96>,
     pub name: FixedStr<24>,
-    pub request: Option<FetchRequest>,
-    pub job: JobState,
-    pub small_body: [u8; SMALL_BODY_MAX],
-    pub small_len: usize,
+    /// USB power present, read from the radio chip on a Pico W. `None`
+    /// until the radio is up.
+    pub usb_power: Option<bool>,
+    pub requests: [Option<FetchRequest>; LANES],
+    pub jobs: [JobState; LANES],
+    pub small_body: [[u8; SMALL_BODY_MAX]; LANES],
+    pub small_len: [usize; LANES],
 }
 
 impl Shared {
@@ -186,10 +228,11 @@ impl Shared {
             password: FixedStr::new(),
             server: FixedStr::new(),
             name: FixedStr::new(),
-            request: None,
-            job: JobState::Idle,
-            small_body: [0; SMALL_BODY_MAX],
-            small_len: 0,
+            usb_power: None,
+            requests: [None, None],
+            jobs: [JobState::Idle; LANES],
+            small_body: [[0; SMALL_BODY_MAX]; LANES],
+            small_len: [0; LANES],
         }
     }
 }
@@ -226,6 +269,11 @@ impl NetHandle {
 
     pub fn state(&self) -> NetState {
         with(|s| s.state)
+    }
+
+    /// USB power as seen by the radio chip (Pico W). `None` when unknown.
+    pub fn usb_power(&self) -> Option<bool> {
+        with(|s| s.usb_power)
     }
 
     pub fn ssid(&self) -> FixedStr<32> {
@@ -270,8 +318,18 @@ impl NetHandle {
         WAKE.signal(());
     }
 
-    /// Start a fetch. Poll `take_job` each frame for the outcome.
+    /// Start a fetch on the app lane. Poll `take_job` each frame for the outcome.
     pub fn fetch(&mut self, req: FetchRequest) -> Result<(), FetchError> {
+        self.fetch_on(Lane::App, req)
+    }
+
+    /// App-lane job state. A finished job is returned once, then reset to Idle.
+    pub fn take_job(&mut self) -> JobState {
+        self.take_job_on(Lane::App)
+    }
+
+    /// Start a fetch on `lane`.
+    pub fn fetch_on(&mut self, lane: Lane, req: FetchRequest) -> Result<(), FetchError> {
         if !self.has_radio {
             return Err(FetchError::NoNetwork);
         }
@@ -279,28 +337,30 @@ impl NetHandle {
             if !s.state.is_up() {
                 return Err(FetchError::NoNetwork);
             }
-            if s.job == JobState::Pending {
+            if s.jobs[lane as usize] == JobState::Pending {
                 return Err(FetchError::Busy);
             }
-            s.request = Some(req);
-            s.job = JobState::Pending;
+            s.requests[lane as usize] = Some(req);
+            s.jobs[lane as usize] = JobState::Pending;
             Ok(())
         })?;
         WAKE.signal(());
         Ok(())
     }
 
-    /// Current job state. A finished job is returned once, then reset to Idle.
-    pub fn take_job(&mut self) -> JobState {
-        with(|s| match s.job {
-            JobState::Done(_) | JobState::Failed(_) => core::mem::replace(&mut s.job, JobState::Idle),
-            other => other,
+    /// Job state on `lane`. A finished job is returned once, then reset to Idle.
+    pub fn take_job_on(&mut self, lane: Lane) -> JobState {
+        with(|s| {
+            let job = &mut s.jobs[lane as usize];
+            match *job {
+                JobState::Done(_) | JobState::Failed(_) => core::mem::replace(job, JobState::Idle),
+                other => other,
+            }
         })
     }
 
-    /// Read the body of the last `Sink::Small` fetch.
-    #[allow(dead_code)]
-    pub fn small_body<R>(&self, f: impl FnOnce(&[u8]) -> R) -> R {
-        with(|s| f(&s.small_body[..s.small_len]))
+    /// Read the body of the last `Sink::Small` fetch on `lane`.
+    pub fn small_body_on<R>(&self, lane: Lane, f: impl FnOnce(&[u8]) -> R) -> R {
+        with(|s| f(&s.small_body[lane as usize][..s.small_len[lane as usize]]))
     }
 }

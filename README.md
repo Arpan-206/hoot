@@ -23,7 +23,11 @@ a 160x128 colour display, eight buttons, two white LEDs and a speaker.
 | Flash storage: config record and 64 KiB blob slots | Done, untested on hardware |
 | Wi-Fi, DHCP, DNS and HTTP client (Pico W, `wifi` feature) | Done, untested on hardware |
 | Photo frame app | Done, untested on hardware |
-| Wi-Fi setup on the device: hotspot, QR code, captive portal | Done, untested on hardware |
+| Wi-Fi setup on the device: hotspot, QR code, captive portal | Done, verified with a phone |
+| Boot loader with two firmware partitions and rollback | Done, boots on hardware |
+| Firmware updates over the air from the photo server | Done |
+| Heartbeat, remote warnings and server commands | Done, verified |
+| Battery saver: idle dimming, slower polling | Done |
 | Kernel panic indicator (both LEDs blink) | Done |
 | Audio (I2S) | Not started |
 | USB serial console | Not started |
@@ -87,19 +91,23 @@ another host.
 
 ## Flash
 
+The OS runs behind a small boot loader, so a Sprig is set up in three
+parts: boot loader, radio firmware (Pico W only) and the OS. The first two
+never change; later OS updates arrive over the air or with one command.
+
+First time, or after changing the flash layout:
+
 1. Hold the BOOTSEL button on the Pico. Connect USB. Release the button.
+2. Run `tools/flash-all.sh wifi` (or `tools/flash-all.sh plain` for a
+   plain Pico). It flashes the boot loader, writes the radio firmware to
+   its partition, flashes the OS and reboots into it.
+
+OS only, later:
+
+1. Choose "Reboot to USB" in the menu, or hold BOOTSEL while plugging in.
 2. Run `cargo run --release`, or `cargo run-w` for a Pico W. This calls
-   `tools/flash.sh`, which makes picotool write the program over USB,
-   verify it and start it.
-   The manual equivalent is:
-
-   ```sh
-   picotool load -v -x target/thumbv6m-none-eabi/release/sprig-os -t elf
-   ```
-3. The Sprig boots into Sprig OS.
-
-After the first flash you no longer need the button. Choose
-"Reboot to USB" in the menu instead.
+   `tools/flash.sh`, which makes picotool write the OS over USB, verify
+   it and reboot the board.
 
 Do not copy a UF2 file to the `RPI-RP2` drive on macOS 15 or later. The
 system's FSKit FAT driver can hang on that drive. If a copy has already
@@ -107,10 +115,20 @@ hung, unplug the Sprig. The stuck command then exits on its own.
 
 ## Controls
 
+The menu has two levels. Apps sit at the top, with Settings and Developer
+folded away.
+
+| Menu | Entries |
+| --- | --- |
+| Top | Photo frame, About, Settings, Developer |
+| Settings | Network, Battery saver, Clear photo cache, Reboot, Reboot to USB |
+| Developer | Input test, LEDs & backlight, Display test |
+
 | Where | Button | Action |
 | --- | --- | --- |
-| Menu | W or I / S or K | Move up / down |
-| Menu | L or D | Open the selected item |
+| Any menu | W or I / S or K | Move up / down |
+| Any menu | L or D | Open the selected item |
+| Submenu | J or A | Back to the top menu |
 | Any app | J | Back to the menu |
 | Input test | Hold J for 1 s | Back to the menu |
 | LEDs app | W/S, I/K, A/D | Left LED, right LED, backlight |
@@ -118,9 +136,10 @@ hung, unplug the Sprig. The stuck command then exits on its own.
 | Photo frame | Hold L for 2 s | Forget the cached photo time and fetch again |
 | Network (Pico W only) | L or D | Connect to Wi-Fi |
 | Network (Pico W only) | K | Open the setup hotspot |
-| Menu: Clear photo cache | L | Erase both photo slots and the stored timestamp |
-| Menu: Reboot | L | Normal reset |
-| Menu: Reboot to USB | L | Reset into the USB flash mode |
+| Settings: Clear photo cache | L | Erase both photo slots and the stored timestamp |
+| Settings: Battery saver | L | Cycle auto, on, off |
+| Settings: Reboot | L | Normal reset |
+| Settings: Reboot to USB | L | Reset into the USB flash mode |
 
 ## First boot checklist
 
@@ -133,13 +152,77 @@ hung, unplug the Sprig. The stuck command then exits on its own.
 5. "About" names the right module: Pico or Pico W. A Pico W has a metal
    can and a small antenna area at the end of the module.
 
+## Updates over the air
+
+Frames update themselves from the photo server, like the ESP32 frame.
+
+1. Bump `version` under `[workspace.package]` in `Cargo.toml`.
+2. Run `tools/release.sh ~/Code/Hardware/frame-server`. It builds the
+   Wi-Fi OS, extracts the flat image with `tools/mkbin.py`, and writes
+   `firmware/sprig-os.bin` and `firmware/version.txt` in the server folder.
+3. Each Sprig checks `/firmware/version.txt` a minute after boot and
+   every six hours after that, whatever is on screen. If the published
+   version differs from its own, it streams the image into the update
+   partition, marks it and reboots. The "check for update" button on the
+   web page makes it check on its next poll instead.
+
+The boot loader swaps the new image in, which takes a few seconds with a
+dark screen. The OS confirms the boot after running for 20 seconds. If it
+never does, for example because the new image crashes, the next reset
+swaps the old image back. The boot loader itself is never updated over
+the air.
+
+## Heartbeat, remote warnings and commands
+
+An OS agent runs beside the shell, whatever app is on screen. Every 30 s
+it polls `<server>/device/<name>` with `X-Sprig-*` headers: version,
+uptime, module, the app on screen, failure count and the last warning.
+The server stores them and the web page shows them in the Device card.
+Warnings logged on the Sprig are posted to `/log/<name>` as they happen,
+at most once a minute, and the card shows the last lines.
+
+The server can hand the Sprig one command per heartbeat in the reply
+header `X-Sprig-Command`. The Device card queues them: refetch photo,
+clear cache, check for update, reboot, open Wi-Fi setup. Nothing connects
+to the Sprig from outside; it all rides on the heartbeat. The agent also
+runs the firmware update check. Apps only fetch their own content.
+
+The agent's requests travel on a separate lane of the network service, so
+an app can never block them.
+
+## Battery saver
+
+The Sprig runs from two AAA cells or from USB. Battery saver stretches the
+cells; it changes nothing that a frame on a desk would notice.
+
+| Setting | Meaning |
+| --- | --- |
+| Auto | Saver on while on battery, off on USB. A plain Pico reads its USB sense pin; a Pico W asks its radio chip, which holds that pin there. Until the radio is up, auto means off |
+| On | Saver always on |
+| Off | Saver always off |
+
+Cycle it with "Battery saver" under Settings, or from the web page. About
+shows the current state. A "z" in the title bar means saver is active.
+
+What saver does:
+
+- After 30 s without a key press the backlight drops to 30 % of its
+  setting. The first key press restores it, and that press does nothing
+  else.
+- The photo frame polls every 60 s instead of 15 s.
+- The heartbeat goes every 5 min instead of 30 s.
+
+The radio already sleeps between packets in every mode, and the display
+is only written when something changed, so the rest of the system idles
+by itself.
+
 ## Wi-Fi setup on the device
 
 The Sprig sets itself up the way the ESP32 frame does, without a rebuild.
 
 1. The setup hotspot opens by itself when no network is saved, when the
    saved network refuses three joins in a row, or when you press K in the
-   Network app. The screen shows a QR code and three steps.
+   Network app under Settings. The screen shows a QR code and three steps.
 2. Scan the code with a phone, or join the open Wi-Fi `Sprig-Setup`.
 3. A page opens by itself. If it does not, open `http://192.168.4.1`.
 4. Pick your network from the list, type the password, check the photo
@@ -208,23 +291,35 @@ there reboots into USB flash mode.
 | `os/src/drivers/` | ST7735, buttons, PWM dimmer, power monitor, module detection |
 | `os/src/storage/` | Config store and blob slots in flash |
 | `os/src/net/` | Network handle for apps, HTTP client, Wi-Fi task, setup portal with DHCP and DNS servers |
+| `os/src/ota.rs` | Firmware updater: streams images into the update partition, confirms boots |
+| `os/src/agent.rs` | OS agent: heartbeat, warnings, server commands, update check |
+| `boot/` | `sprig-boot`: the boot loader |
 | `os/src/ui/` | Theme, text formatting, splash, shell |
 | `os/src/apps/` | The `App` trait, the app template, and the built-in apps |
 | `os/firmware/cyw43/` | Radio firmware blobs (Infineon permissive binary license) |
 | `os/secrets.example.toml` | Template for build-time defaults |
 | `os/src/panic.rs` | Panic handler |
 | `os/memory.x` | Flash and RAM layout for the linker |
-| `tools/flash.sh` | Cargo runner: flash over USB with picotool |
+| `tools/flash.sh` | Cargo runner: flash the OS over USB with picotool |
+| `tools/flash-all.sh` | First-time flash: boot loader, radio partition, OS |
+| `tools/release.sh` | Publish an over-the-air update to the server |
+| `tools/mkbin.py`, `tools/mkradio.py` | Build the flat OS image and the radio partition image |
 
 ## Flash map
 
 | Offset | Size | Use |
 | --- | --- | --- |
-| 0x000000 | 1 MiB | Firmware |
-| 0x100000 | 512 KiB | Reserved for app slots (WASM) |
-| 0x180000 | 448 KiB | 7 blob slots of 64 KiB. Photos use slots 0 and 1 |
+| 0x000000 | 24 KiB | Boot2 and the boot loader (`boot/`) |
+| 0x006000 | 4 KiB | Boot loader state |
+| 0x007000 | 640 KiB | Active firmware, where the OS runs |
+| 0x0A7000 | 644 KiB | Update partition, written over the air |
+| 0x148000 | 288 KiB | Radio firmware for the Pico W, written once |
+| 0x190000 | 384 KiB | 6 blob slots of 64 KiB. Photos use slots 0 and 1 |
 | 0x1F0000 | 8 KiB | Config record, two sectors written alternately |
 | 0x1F2000 | 56 KiB | Free |
+
+The boot loader, `os/memory.x` and `os/src/board.rs` all state this map
+and must agree.
 
 ## Writing an app
 
@@ -271,9 +366,6 @@ Flash its UF2 the same way as above.
 
 ## Next steps
 
-1. Test the setup portal with a phone and fix what the hardware reveals.
+1. Resume the last app after a power cut.
 2. Seen button and a message cue in the photo frame.
-3. WASM app runtime (`wasmi`) with the network and storage API as host
-   functions. Measure flash, RAM and speed first.
-4. Firmware and app updates over the air with `embassy-boot`.
-5. I2S audio.
+3. I2S audio.

@@ -4,7 +4,7 @@
 //! configured access point, gets an address by DHCP, then serves fetch
 //! requests from `SHARED` until the link drops, and then rejoins.
 
-use cyw43::{JoinOptions, PowerManagementMode};
+use cyw43::{A4, Aligned, JoinOptions, PowerManagementMode};
 use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use embassy_executor::Spawner;
 use embassy_net::{Config, StackResources};
@@ -17,13 +17,17 @@ use embassy_rp::pio::Pio;
 use embassy_time::{Duration, Timer, with_timeout};
 use static_cell::StaticCell;
 
-use super::{JobState, NetState, SMALL_BODY_MAX, Sink, WAKE, http, portal, with};
+use super::{JobState, Lane, NetState, SMALL_BODY_MAX, Sink, WAKE, http, portal, with};
 use crate::hw::Irqs;
-use crate::storage::FlashMutex;
+use crate::storage::{FlashMutex, xip};
 
 type Cyw43Runner = cyw43::Runner<'static, cyw43::SpiBus<Output<'static>, PioSpi<'static, PIO0, 0>>>;
 
 const DHCP_TIMEOUT: Duration = Duration::from_secs(20);
+/// The radio chip's GPIO 2 is the USB power sense on a Pico W.
+const RADIO_GPIO_VBUS: u8 = 2;
+/// How often to ask the radio for the USB sense while idle.
+const VBUS_POLL_TICKS: u32 = 5;
 const RETRY_DELAY: Duration = Duration::from_secs(5);
 /// After this many failed joins in a row the setup portal opens.
 const MAX_JOIN_FAILURES: u8 = 3;
@@ -36,6 +40,35 @@ async fn cyw43_runner(runner: Cyw43Runner) -> ! {
 #[embassy_executor::task]
 async fn net_runner(mut runner: embassy_net::Runner<'static, cyw43::NetDriver<'static>>) -> ! {
     runner.run().await
+}
+
+/// The radio firmware partition: header, then firmware, CLM and NVRAM
+/// blobs, each padded to 4 bytes. Written once by `tools/mkradio.py`.
+/// A 4-byte aligned blob in flash, as the radio driver wants it.
+type Blob = &'static Aligned<A4, [u8]>;
+
+fn radio_firmware() -> Option<(Blob, Blob, Blob)> {
+    use crate::board::flash_map::{RADIO_SIZE, RADIO_START};
+    let header = xip(RADIO_START, 20);
+    if &header[..4] != b"SRAD" || u32::from_le_bytes(header[4..8].try_into().ok()?) != 1 {
+        return None;
+    }
+    let len = |i: usize| u32::from_le_bytes(header[i..i + 4].try_into().unwrap()) as usize;
+    let (fw_len, clm_len, nvram_len) = (len(8), len(12), len(16));
+    let pad4 = |n: usize| n.div_ceil(4) * 4;
+    let fw_off = 0x100;
+    let clm_off = fw_off + pad4(fw_len);
+    let nvram_off = clm_off + pad4(clm_len);
+    if nvram_off + nvram_len > RADIO_SIZE as usize || fw_len < 1024 {
+        return None;
+    }
+    let blob = |off: usize, len: usize| -> Blob {
+        let bytes = xip(RADIO_START + off as u32, len);
+        // SAFETY: `Aligned<A4, [u8]>` is a transparent wrapper with 4-byte
+        // alignment, and every blob offset is a multiple of 4.
+        unsafe { &*(bytes as *const [u8] as *const Aligned<A4, [u8]>) }
+    };
+    Some((blob(fw_off, fw_len), blob(clm_off, clm_len), blob(nvram_off, nvram_len)))
 }
 
 /// Pins that the radio owns on a Pico W. Handed over whole by `main`.
@@ -71,9 +104,13 @@ pub async fn wifi_service(spawner: Spawner, pins: RadioPins, flash: &'static Fla
         dma::Channel::new(pins.dma, Irqs),
     );
 
-    let fw = cyw43::aligned_bytes!("../../firmware/cyw43/43439A0.bin");
-    let clm = cyw43::aligned_bytes!("../../firmware/cyw43/43439A0_clm.bin");
-    let nvram = cyw43::aligned_bytes!("../../firmware/cyw43/nvram_rp2040.bin");
+    let Some((fw, clm, nvram)) = radio_firmware() else {
+        warn!("wifi: no radio firmware in flash; flash target/radio.bin at 0x10148000");
+        with(|s| s.state = NetState::NoRadioFirmware);
+        loop {
+            Timer::after_secs(3600).await;
+        }
+    };
 
     static STATE: StaticCell<cyw43::State> = StaticCell::new();
     let (device, mut control, runner) =
@@ -82,7 +119,9 @@ pub async fn wifi_service(spawner: Spawner, pins: RadioPins, flash: &'static Fla
     info!("wifi: firmware loaded, initialising");
     control.init(clm).await;
     control.set_power_management(PowerManagementMode::PowerSave).await;
-    info!("wifi: radio ready");
+    let usb = control.gpio_get(RADIO_GPIO_VBUS).await;
+    with(|s| s.usb_power = Some(usb));
+    info!("wifi: radio ready, usb power: {}", usb);
 
     // Sockets: DHCP client, DNS client, HTTP client, and the portal's DHCP,
     // DNS and HTTP servers.
@@ -162,7 +201,13 @@ pub async fn wifi_service(spawner: Spawner, pins: RadioPins, flash: &'static Fla
         info!("wifi: up, ip {}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]);
 
         // Serve requests until the link drops.
+        let mut ticks: u32 = 0;
         loop {
+            ticks = ticks.wrapping_add(1);
+            if ticks.is_multiple_of(VBUS_POLL_TICKS) {
+                let usb = control.gpio_get(RADIO_GPIO_VBUS).await;
+                with(|s| s.usb_power = Some(usb));
+            }
             if !stack.is_link_up() || !stack.is_config_up() {
                 warn!("wifi: link lost, rejoining");
                 with(|s| s.state = NetState::Lost);
@@ -171,25 +216,35 @@ pub async fn wifi_service(spawner: Spawner, pins: RadioPins, flash: &'static Fla
             if with(|s| s.portal_requested) {
                 break;
             }
-            let request = with(|s| s.request.take());
+            // The system lane goes first: the device must stay serviceable
+            // whatever the app on screen is doing.
+            let request = with(|s| {
+                for lane in [Lane::System, Lane::App] {
+                    if let Some(r) = s.requests[lane as usize].take() {
+                        return Some((lane, r));
+                    }
+                }
+                None
+            });
             match request {
-                Some(req) => {
-                    info!("http: GET {}", req.url.as_str());
+                Some((lane, req)) => {
+                    info!("http: {} {}", if req.body == super::Body::None { "GET" } else { "POST" }, req.url.as_str());
                     let outcome = http::fetch(stack, &req, flash, &mut small).await;
                     match &outcome {
                         Ok(r) => info!("http: {} ({} bytes)", r.status, r.len),
                         Err(e) => warn!("http: {}", e.label()),
                     }
+                    let i = lane as usize;
                     with(|s| match outcome {
                         Ok(r) => {
                             if req.sink == Sink::Small {
                                 let n = (r.len as usize).min(SMALL_BODY_MAX);
-                                s.small_body[..n].copy_from_slice(&small[..n]);
-                                s.small_len = n;
+                                s.small_body[i][..n].copy_from_slice(&small[..n]);
+                                s.small_len[i] = n;
                             }
-                            s.job = JobState::Done(r);
+                            s.jobs[i] = JobState::Done(r);
                         }
-                        Err(e) => s.job = JobState::Failed(e),
+                        Err(e) => s.jobs[i] = JobState::Failed(e),
                     });
                 }
                 // Wake for new work, or once a second to check the link.

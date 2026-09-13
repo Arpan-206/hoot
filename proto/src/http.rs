@@ -10,6 +10,8 @@ pub struct Head<'a> {
     pub content_length: Option<usize>,
     pub last_modified: Option<&'a str>,
     pub chunked: bool,
+    /// `X-Sprig-Command`: an instruction from the photo server, if any.
+    pub command: Option<&'a str>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -70,18 +72,22 @@ pub fn parse_head(head: &[u8]) -> Result<Head<'_>, HeadError> {
             out.last_modified = Some(value);
         } else if name.eq_ignore_ascii_case("transfer-encoding") {
             out.chunked = value.eq_ignore_ascii_case("chunked");
+        } else if name.eq_ignore_ascii_case("x-sprig-command") {
+            out.command = Some(value);
         }
     }
     Ok(out)
 }
 
-/// Write a GET request head into `buf`. Returns the number of bytes written,
-/// or `None` if `buf` is too small.
+/// Write a GET request head into `buf`. `extra` holds ready-made header
+/// lines, each ending in `\r\n`, or is empty. Returns the number of bytes
+/// written, or `None` if `buf` is too small.
 pub fn write_get(
     buf: &mut [u8],
     host: &str,
     path: &str,
     if_modified_since: Option<&str>,
+    extra: &str,
 ) -> Option<usize> {
     let mut w = Writer { buf, len: 0 };
     w.put(b"GET ")?;
@@ -94,8 +100,48 @@ pub fn write_get(
         w.put(ims.as_bytes())?;
         w.put(b"\r\n")?;
     }
+    w.put(extra.as_bytes())?;
     w.put(b"\r\n")?;
     Some(w.len)
+}
+
+/// Write a POST request head for a body of `content_length` bytes.
+pub fn write_post(
+    buf: &mut [u8],
+    host: &str,
+    path: &str,
+    content_type: &str,
+    content_length: usize,
+    extra: &str,
+) -> Option<usize> {
+    let mut w = Writer { buf, len: 0 };
+    w.put(b"POST ")?;
+    w.put(path.as_bytes())?;
+    w.put(b" HTTP/1.1\r\nHost: ")?;
+    w.put(host.as_bytes())?;
+    w.put(b"\r\nUser-Agent: SprigOS\r\nConnection: close\r\nContent-Type: ")?;
+    w.put(content_type.as_bytes())?;
+    w.put(b"\r\nContent-Length: ")?;
+    let mut digits = [0u8; 10];
+    w.put(itoa(content_length, &mut digits))?;
+    w.put(b"\r\n")?;
+    w.put(extra.as_bytes())?;
+    w.put(b"\r\n")?;
+    Some(w.len)
+}
+
+/// Decimal digits of `v` without `core::fmt`.
+fn itoa(mut v: usize, buf: &mut [u8; 10]) -> &[u8] {
+    let mut i = buf.len();
+    loop {
+        i -= 1;
+        buf[i] = b'0' + (v % 10) as u8;
+        v /= 10;
+        if v == 0 {
+            break;
+        }
+    }
+    &buf[i..]
 }
 
 struct Writer<'a> {
@@ -171,11 +217,31 @@ mod tests {
     #[test]
     fn writes_a_get_request() {
         let mut buf = [0u8; 256];
-        let n = write_get(&mut buf, "192.168.1.9:8000", "/frame/arpan.rgb565", Some("Sat, 13 Sep 2026 10:00:00 GMT")).unwrap();
+        let n = write_get(&mut buf, "192.168.1.9:8000", "/frame/arpan.rgb565", Some("Sat, 13 Sep 2026 10:00:00 GMT"), "X-Sprig-Version: 0.1.0\r\n").unwrap();
         let s = core::str::from_utf8(&buf[..n]).unwrap();
         assert!(s.starts_with("GET /frame/arpan.rgb565 HTTP/1.1\r\nHost: 192.168.1.9:8000\r\n"));
         assert!(s.contains("If-Modified-Since: Sat, 13 Sep 2026 10:00:00 GMT\r\n"));
+        assert!(s.contains("X-Sprig-Version: 0.1.0\r\n"));
         assert!(s.ends_with("\r\n\r\n"));
-        assert_eq!(write_get(&mut [0u8; 16], "h", "/", None), None);
+        assert_eq!(write_get(&mut [0u8; 16], "h", "/", None, ""), None);
+    }
+
+    #[test]
+    fn writes_a_post_request() {
+        let mut buf = [0u8; 256];
+        let n = write_post(&mut buf, "h:8000", "/log/arpan", "text/plain", 1234, "").unwrap();
+        let s = core::str::from_utf8(&buf[..n]).unwrap();
+        assert!(s.starts_with("POST /log/arpan HTTP/1.1\r\nHost: h:8000\r\n"));
+        assert!(s.contains("Content-Type: text/plain\r\n"));
+        assert!(s.contains("Content-Length: 1234\r\n"));
+        assert!(s.ends_with("\r\n\r\n"));
+    }
+
+    #[test]
+    fn parses_a_server_command() {
+        let h = parse_head(b"HTTP/1.1 304 Not Modified\r\nX-Sprig-Command: reboot\r\n\r\n").unwrap();
+        assert_eq!(h.command, Some("reboot"));
+        let h = parse_head(b"HTTP/1.1 200 OK\r\n\r\n").unwrap();
+        assert_eq!(h.command, None);
     }
 }

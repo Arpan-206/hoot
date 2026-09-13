@@ -46,7 +46,7 @@ pub fn net_color(state: NetState) -> Rgb565 {
     match state {
         NetState::NoRadio => MUTED,
         NetState::Up(_) => ACCENT,
-        NetState::JoinFailed | NetState::Lost => WARN,
+        NetState::JoinFailed | NetState::Lost | NetState::NoRadioFirmware => WARN,
         _ => TEXT,
     }
 }

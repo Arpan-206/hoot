@@ -57,6 +57,7 @@ pub mod photo_frame;
 use sprig_gfx::Framebuffer;
 
 use crate::drivers::input::{Button, Input};
+use crate::drivers::power::PowerStatus;
 use crate::hw::Hardware;
 use crate::net::NetHandle;
 use crate::storage::Storage;
@@ -78,6 +79,10 @@ pub struct Ctx<'a> {
     /// Only the network apps persist anything so far.
     #[cfg_attr(not(feature = "wifi"), allow(dead_code))]
     pub store: &'a mut Storage,
+    /// Latest power reading, refreshed twice a second by the OS.
+    pub power: PowerStatus,
+    /// True when battery saver is active: poll less, expect a dim screen.
+    pub saver: bool,
     /// Milliseconds since boot at the start of this frame.
     pub now_ms: u32,
     /// How long the previous frame took to update and draw.

@@ -1,0 +1,20 @@
+[package]
+name = "sprig-boot"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+description = "Boot loader for Sprig OS: swaps in firmware updates and reverts bad ones."
+
+[[bin]]
+name = "sprig-boot"
+test = false
+bench = false
+
+[dependencies]
+cortex-m = { version = "0.7.9", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = "0.7.6"
+embassy-boot-rp = "0.10.0"
+embassy-rp = { version = "0.10.0", features = ["rp2040", "boot2-w25q080"] }
+embassy-sync = "0.8.0"
+embassy-time = "0.5.1"
+embedded-storage = "0.3.1"

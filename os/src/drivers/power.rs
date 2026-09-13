@@ -17,9 +17,11 @@ const BATTERY_EMPTY_MV: u32 = 2000;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PowerStatus {
     pub usb: bool,
+    /// True when `usb` is a real reading. A Pico W learns it from the radio.
+    pub usb_known: bool,
     pub vsys_mv: u16,
-    /// False when the board cannot measure (Pico W). Other fields are then zero.
-    pub known: bool,
+    /// True when `vsys_mv` is a real reading. Only a plain Pico can measure.
+    pub vsys_known: bool,
 }
 
 impl PowerStatus {
@@ -62,6 +64,6 @@ impl Power {
         // 12-bit result, 3.3 V reference, divided by 3 on the board.
         let vsys_mv = (raw * 3 * 3300 / 4095) as u16;
         let usb = self.vbus.as_ref().is_some_and(|pin| pin.is_high());
-        PowerStatus { usb, vsys_mv, known: true }
+        PowerStatus { usb, usb_known: self.vbus.is_some(), vsys_mv, vsys_known: true }
     }
 }

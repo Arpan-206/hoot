@@ -10,7 +10,8 @@ use embedded_io_async::Write;
 use sprig_proto::record::FixedStr;
 use sprig_proto::{http, url};
 
-use super::{FetchError, FetchRequest, FetchResult, SMALL_BODY_MAX, Sink};
+use super::{Body, FetchError, FetchRequest, FetchResult, SMALL_BODY_MAX, Sink};
+use crate::ota;
 use crate::storage::{BLOB_DATA_MAX, BlobWriter, FlashMutex};
 
 const DNS_TIMEOUT: Duration = Duration::from_secs(5);
@@ -61,9 +62,22 @@ pub async fn fetch(
         host.push_str(itoa(u.port as u32, &mut port));
     }
     let ims = (!req.if_modified_since.is_empty()).then(|| req.if_modified_since.as_str());
-    let mut reqbuf = [0u8; 384];
-    let n = http::write_get(&mut reqbuf, host.as_str(), u.path, ims).ok_or(FetchError::BadUrl)?;
-    sock.write_all(&reqbuf[..n]).await.map_err(|_| FetchError::Connect)?;
+    let mut reqbuf = [0u8; 640];
+    match req.body {
+        Body::None => {
+            let n = http::write_get(&mut reqbuf, host.as_str(), u.path, ims, req.headers.as_str())
+                .ok_or(FetchError::BadUrl)?;
+            sock.write_all(&reqbuf[..n]).await.map_err(|_| FetchError::Connect)?;
+        }
+        Body::RecentWarnings => {
+            let mut lines = [0u8; 1024];
+            let len = crate::logging::drain_into(&mut lines);
+            let n = http::write_post(&mut reqbuf, host.as_str(), u.path, "text/plain", len, req.headers.as_str())
+                .ok_or(FetchError::BadUrl)?;
+            sock.write_all(&reqbuf[..n]).await.map_err(|_| FetchError::Connect)?;
+            sock.write_all(&lines[..len]).await.map_err(|_| FetchError::Connect)?;
+        }
+    }
 
     // Read until the blank line that ends the head.
     let mut buf = [0u8; HEAD_MAX];
@@ -87,6 +101,7 @@ pub async fn fetch(
         len: 0,
         last_modified: FixedStr::truncated(head.last_modified.unwrap_or("")),
         crc32: 0,
+        command: FixedStr::truncated(head.command.unwrap_or("")),
     };
     if head.status != 200 {
         sock.close();
@@ -130,6 +145,31 @@ pub async fn fetch(
             let header = w.finish().map_err(|_| FetchError::Storage)?;
             result.len = header.len;
             result.crc32 = header.crc32;
+        }
+        Sink::Firmware => {
+            let mut scratch = ota::scratch();
+            let mut updater = ota::updater(flash, &mut scratch);
+            let mut w = ota::ImageWriter::new(&mut updater);
+            let leftover = filled - head_end;
+            if leftover > 0 {
+                w.write(&buf[head_end..filled]).map_err(|_| FetchError::Update)?;
+                total += leftover;
+            }
+            loop {
+                if content_length.is_some_and(|l| total >= l) {
+                    break;
+                }
+                let n = sock.read(&mut buf).await.map_err(|_| FetchError::Protocol)?;
+                if n == 0 {
+                    break;
+                }
+                w.write(&buf[..n]).map_err(|_| FetchError::Update)?;
+                total += n;
+            }
+            if content_length.is_some_and(|l| l != total) {
+                return Err(FetchError::Protocol);
+            }
+            result.len = w.finish().map_err(|_| FetchError::Update)? as u32;
         }
         Sink::Small => {
             let leftover = (filled - head_end).min(SMALL_BODY_MAX);

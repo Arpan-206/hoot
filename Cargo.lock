@@ -264,8 +264,6 @@ dependencies = [
 [[package]]
 name = "cyw43"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "033e856bf6f38c96fee3e3f398cceff0ca2c2fae5db255bcd23495216c7047da"
 dependencies = [
  "aligned",
  "cortex-m",
@@ -356,6 +354,38 @@ name = "either"
 version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "252afb9ae5eaa683babdc6a068b3f5726eb19e05070c731f9b2a23a7c3e8ed34"
+
+[[package]]
+name = "embassy-boot"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73bfc955c9238df2ce9fecc6f18a64b13ecaa41a3cd42d940a09f304765d10db"
+dependencies = [
+ "digest",
+ "document-features",
+ "embassy-embedded-hal",
+ "embassy-sync",
+ "embedded-storage",
+ "embedded-storage-async",
+ "signature",
+]
+
+[[package]]
+name = "embassy-boot-rp"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fc17df4cf2a8ba86e8559a6515104e31ca7aa6b36221199310e244157935204"
+dependencies = [
+ "cfg-if",
+ "cortex-m",
+ "cortex-m-rt",
+ "embassy-boot",
+ "embassy-rp",
+ "embassy-sync",
+ "embassy-time",
+ "embedded-storage",
+ "embedded-storage-async",
+]
 
 [[package]]
 name = "embassy-embedded-hal"
@@ -1441,6 +1471,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
+name = "signature"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
+
+[[package]]
 name = "siphasher"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1484,17 +1520,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "sprig-boot"
+version = "0.1.5"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "embassy-boot-rp",
+ "embassy-rp",
+ "embassy-sync",
+ "embassy-time",
+ "embedded-storage",
+]
+
+[[package]]
 name = "sprig-gfx"
-version = "0.1.0"
+version = "0.1.5"
 
 [[package]]
 name = "sprig-os"
-version = "0.1.0"
+version = "0.1.5"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "cyw43",
  "cyw43-pio",
+ "embassy-boot-rp",
+ "embassy-embedded-hal",
  "embassy-executor",
  "embassy-futures",
  "embassy-net",
@@ -1506,6 +1557,7 @@ dependencies = [
  "embedded-hal 1.0.0",
  "embedded-hal-async",
  "embedded-io-async 0.7.0",
+ "embedded-storage",
  "log",
  "portable-atomic",
  "qrcodegen-no-heap",
@@ -1516,7 +1568,7 @@ dependencies = [
 
 [[package]]
 name = "sprig-proto"
-version = "0.1.0"
+version = "0.1.5"
 
 [[package]]
 name = "ssmarshal"

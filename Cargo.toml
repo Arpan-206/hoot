@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
-members = ["os", "gfx", "proto"]
+members = ["os", "gfx", "proto", "boot"]
 default-members = ["os"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.5"
 edition = "2021"
 license = "MIT"
 
@@ -21,3 +21,8 @@ debug = 2
 lto = "fat"
 opt-level = "s"    # unoptimised Cortex-M0+ code is too slow and too large to be useful
 overflow-checks = true
+
+# Local copy of the radio driver with one addition: reading the chip's own
+# GPIO pins, which is how a Pico W senses USB power. See vendor/cyw43/README.
+[patch.crates-io]
+cyw43 = { path = "vendor/cyw43" }

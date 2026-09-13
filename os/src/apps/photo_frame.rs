@@ -6,9 +6,14 @@
 //! streams a new photo straight into a flash blob slot, then shows it from
 //! there. The last photo therefore survives reboots and server outages.
 //!
+//! Heartbeat, warnings, server commands and firmware updates are not this
+//! app's business: the OS agent (`agent.rs`) does them whatever is on
+//! screen. A "refetch" or "clear-cache" command reaches this app through
+//! the config it reads before every poll.
+//!
 //! Behaviour follows the original: once a photo is on screen nothing draws
-//! over it. Trouble shows on the left LED instead: two pulses when the
-//! network is down, three when the server cannot be reached.
+//! over it. Trouble shows on the left LED instead: two pulses when a working
+//! network is lost, three when the server cannot be reached.
 
 use sprig_gfx::{BYTES, CELL_HEIGHT, Framebuffer, Rgb565};
 
@@ -23,8 +28,9 @@ use crate::ui::theme;
 
 pub const INFO: AppInfo = AppInfo { name: "Photo frame", needs_network: true };
 
-/// How often to ask the server for a new photo.
+/// How often to ask the server for a new photo, and in battery saver mode.
 const POLL_MS: u32 = 15_000;
+const POLL_SAVER_MS: u32 = 60_000;
 /// How soon to try again after a failure.
 const RETRY_MS: u32 = 5_000;
 /// Hold L this long to forget the cached timestamp and fetch again.
@@ -37,7 +43,7 @@ const SLOT_A: u8 = 0;
 const SLOT_B: u8 = 1;
 
 /// Forget the cached photo: both slots and the stored timestamp. The next
-/// visit to the app fetches the photo afresh.
+/// poll fetches the photo afresh.
 pub fn clear_cache(store: &mut Storage) -> Result<(), StorageError> {
     info!("photo: clearing cache");
     store.blob_erase(SLOT_A)?;
@@ -105,7 +111,7 @@ impl PhotoFrame {
         }
     }
 
-    fn url(cfg: &Config) -> FixedStr<128> {
+    fn photo_url(cfg: &Config) -> FixedStr<128> {
         let mut u = FixedStr::new();
         u.push_str(cfg.frame_server.as_str().trim_end_matches('/'));
         u.push_str("/frame/");
@@ -129,11 +135,10 @@ impl PhotoFrame {
     fn start_fetch(&mut self, ctx: &mut Ctx) {
         let cfg = ctx.store.config();
         let slot = if cfg.frame_slot == SLOT_A { SLOT_B } else { SLOT_A };
-        let request = FetchRequest {
-            url: Self::url(cfg),
-            if_modified_since: if self.force { FixedStr::new() } else { cfg.frame_last_modified },
-            sink: Sink::Blob { slot, kind: KIND_PHOTO },
-        };
+        let mut request = FetchRequest::get(Self::photo_url(cfg), Sink::Blob { slot, kind: KIND_PHOTO });
+        if !self.force {
+            request.if_modified_since = cfg.frame_last_modified;
+        }
         info!("photo: fetch {} into slot {}", request.url.as_str(), slot);
         match ctx.net.fetch(request) {
             Ok(()) => {
@@ -167,14 +172,14 @@ impl PhotoFrame {
                     self.fails = 0;
                     self.force = false;
                     self.last_error.clear();
-                    self.next_poll_ms = now.wrapping_add(POLL_MS);
+                    self.next_poll_ms = now.wrapping_add(if ctx.saver { POLL_SAVER_MS } else { POLL_MS });
                 } else {
                     self.fail(now, "bad photo");
                 }
             }
             304 => {
                 self.fails = 0;
-                self.next_poll_ms = now.wrapping_add(POLL_MS);
+                self.next_poll_ms = now.wrapping_add(if ctx.saver { POLL_SAVER_MS } else { POLL_MS });
             }
             200 => {
                 let s: StrBuf<24> = format(format_args!("size {}", r.len));

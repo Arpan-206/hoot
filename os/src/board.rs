@@ -15,22 +15,30 @@ pub const FLASH_SIZE: usize = 2 * 1024 * 1024;
 pub const FLASH_SECTOR: u32 = 4096;
 
 /// How the 2 MiB flash is divided. Offsets are from the start of flash.
-/// The firmware image starts at 0 and must stay below `FIRMWARE_END`.
+/// The boot loader (`boot/`) and `memory.x` must agree with this table.
 pub mod flash_map {
-    /// Firmware: 1 MiB. Leaves room for the Wi-Fi blob and a WASM runtime.
-    pub const FIRMWARE_END: u32 = 0x10_0000;
-    /// Reserved for app slots (WASM apps): 512 KiB.
-    pub const APPS_START: u32 = 0x10_0000;
-    pub const APPS_END: u32 = 0x18_0000;
-    /// Blob store: large records such as cached photos. 7 slots of 64 KiB.
-    pub const BLOBS_START: u32 = 0x18_0000;
+    /// Boot2 plus the boot loader.
+    pub const BOOTLOADER_END: u32 = 0x0_6000;
+    /// Boot loader state: one 4 KiB sector.
+    pub const BOOT_STATE_START: u32 = 0x0_6000;
+    /// Active firmware, where the OS runs from: 640 KiB.
+    pub const ACTIVE_START: u32 = 0x0_7000;
+    pub const ACTIVE_SIZE: u32 = 0xA_0000;
+    /// Update (DFU) partition: active size plus one sector for the swap.
+    pub const DFU_START: u32 = 0x0A_7000;
+    pub const DFU_SIZE: u32 = 0xA_1000;
+    /// Radio firmware for the Pico W: stored once, outside both firmware
+    /// partitions, so an update never re-sends the 231 KiB blob.
+    pub const RADIO_START: u32 = 0x14_8000;
+    pub const RADIO_SIZE: u32 = 0x4_8000;
+    /// Blob store: large records such as cached photos. 6 slots of 64 KiB.
+    pub const BLOBS_START: u32 = 0x19_0000;
     pub const BLOB_SLOT_SIZE: u32 = 0x1_0000;
-    pub const BLOB_SLOTS: u8 = 7;
+    pub const BLOB_SLOTS: u8 = 6;
     /// Config store: two 4 KiB sectors written alternately.
     pub const CONFIG_START: u32 = 0x1F_0000;
     pub const CONFIG_SECTORS: u32 = 2;
-    // 0x1F_2000 to 0x20_0000 (56 KiB) stays free, for a boot loader state
-    // page and whatever comes next.
+    // 0x1F_2000 to 0x20_0000 (56 KiB) stays free.
 }
 
 /// SPI clock for the display. 125 MHz / 4 gives exactly this value.
@@ -45,9 +53,7 @@ pub const MADCTL_ML: u8 = 0x10; // vertical refresh direction
 pub const MADCTL_BGR: u8 = 0x08; // panel colour order
 
 /// Landscape, same way up as the stock firmware, with RGB565 sent red-first.
-///
-/// If the picture is upside down, use `MADCTL_MY | MADCTL_MV | MADCTL_ML`.
-/// If red and blue are swapped, add `MADCTL_BGR`.
+/// Verified on hardware: right way up, colours correct.
 pub const TFT_MADCTL: u8 = MADCTL_MX | MADCTL_MV | MADCTL_ML;
 
 /// GPIO assignments.

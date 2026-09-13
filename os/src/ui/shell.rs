@@ -1,7 +1,12 @@
-//! The home screen: a scrolling menu that launches apps and runs a few
-//! system actions, and hands the active app the frame.
+//! The home screen: a two-level menu that launches apps and runs system
+//! actions, and hands the active app the frame.
+//!
+//! Top level: the apps, plus Settings and Developer. Settings holds the
+//! network, battery saver, cache and reboot actions. Developer holds the
+//! hardware test screens. J goes back, as in the apps.
 
 use sprig_gfx::{CELL_HEIGHT, WIDTH};
+use sprig_proto::record::{POWER_AUTO, POWER_NORMAL, POWER_SAVER};
 
 use crate::apps::about::{self, About};
 use crate::apps::display_test::{self, DisplayTest};
@@ -17,14 +22,12 @@ use crate::drivers::power::PowerStatus;
 use crate::ui::text::{StrBuf, format};
 use crate::ui::theme;
 
-const POWER_POLL_MS: u32 = 500;
 const ROW_H: i32 = CELL_HEIGHT + 4;
 /// Rows that fit between the title bar and the footer.
 const VISIBLE_ROWS: usize = ((theme::FOOTER_Y - theme::CONTENT_Y) / ROW_H) as usize;
-/// Upper bound on menu entries. Raise it when the registry grows.
+/// Upper bound on entries in one menu. Raise it when a registry grows.
 const MENU_MAX: usize = 12;
 /// How long a one-line notice such as "cache cleared" stays up.
-#[cfg(feature = "wifi")]
 const NOTICE_MS: u32 = 1_200;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -40,10 +43,30 @@ enum AppId {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+enum Menu {
+    Main,
+    Settings,
+    Developer,
+}
+
+impl Menu {
+    const fn title(self) -> &'static str {
+        match self {
+            Menu::Main => "Sprig OS",
+            Menu::Settings => "Settings",
+            Menu::Developer => "Developer",
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Action {
     Launch(AppId),
+    Open(Menu),
     #[cfg(feature = "wifi")]
     ClearPhotoCache,
+    /// Cycle battery saver: auto, on, off.
+    BatterySaver,
     Reboot,
     RebootToUsb,
 }
@@ -59,33 +82,45 @@ const fn app(info: &'static AppInfo, id: AppId) -> Entry {
     Entry { name: info.name, needs_network: info.needs_network, action: Action::Launch(id) }
 }
 
-#[cfg(feature = "wifi")]
-const CLEAR_CACHE: Entry = Entry { name: "Clear photo cache", needs_network: true, action: Action::ClearPhotoCache };
-const REBOOT: Entry = Entry { name: "Reboot", needs_network: false, action: Action::Reboot };
-const REBOOT_USB: Entry = Entry { name: "Reboot to USB", needs_network: false, action: Action::RebootToUsb };
+const fn item(name: &'static str, action: Action) -> Entry {
+    Entry { name, needs_network: false, action }
+}
 
-/// Every app and action in this build, in menu order. Entries that need the
-/// network exist only in `wifi` builds, and are hidden when there is no radio.
+// Registries. Entries that need the network exist only in `wifi` builds,
+// and are hidden at runtime when there is no radio.
 #[cfg(feature = "wifi")]
-const REGISTRY: &[Entry] = &[
-    app(&about::INFO, AppId::About),
+const MAIN: &[Entry] = &[
     app(&photo_frame::INFO, AppId::PhotoFrame),
-    app(&network::INFO, AppId::Network),
-    app(&input_test::INFO, AppId::InputTest),
-    app(&leds::INFO, AppId::Leds),
-    app(&display_test::INFO, AppId::DisplayTest),
-    CLEAR_CACHE,
-    REBOOT,
-    REBOOT_USB,
+    app(&about::INFO, AppId::About),
+    item("Settings", Action::Open(Menu::Settings)),
+    item("Developer", Action::Open(Menu::Developer)),
 ];
 #[cfg(not(feature = "wifi"))]
-const REGISTRY: &[Entry] = &[
+const MAIN: &[Entry] = &[
     app(&about::INFO, AppId::About),
+    item("Settings", Action::Open(Menu::Settings)),
+    item("Developer", Action::Open(Menu::Developer)),
+];
+
+#[cfg(feature = "wifi")]
+const SETTINGS: &[Entry] = &[
+    app(&network::INFO, AppId::Network),
+    item("Battery saver", Action::BatterySaver),
+    Entry { name: "Clear photo cache", needs_network: true, action: Action::ClearPhotoCache },
+    item("Reboot", Action::Reboot),
+    item("Reboot to USB", Action::RebootToUsb),
+];
+#[cfg(not(feature = "wifi"))]
+const SETTINGS: &[Entry] = &[
+    item("Battery saver", Action::BatterySaver),
+    item("Reboot", Action::Reboot),
+    item("Reboot to USB", Action::RebootToUsb),
+];
+
+const DEVELOPER: &[Entry] = &[
     app(&input_test::INFO, AppId::InputTest),
     app(&leds::INFO, AppId::Leds),
     app(&display_test::INFO, AppId::DisplayTest),
-    REBOOT,
-    REBOOT_USB,
 ];
 
 /// A reset that happens on the next frame, after its notice was drawn.
@@ -96,16 +131,18 @@ enum PendingReset {
 }
 
 pub struct Shell {
-    menu: [Entry; MENU_MAX],
-    menu_len: usize,
+    has_radio: bool,
+    current: Menu,
+    entries: [Entry; MENU_MAX],
+    len: usize,
     selected: usize,
     /// First visible row.
     first: usize,
+    /// Selection in the main menu, restored when a submenu closes.
+    main_selected: usize,
     running: Option<AppId>,
     pending_reset: Option<PendingReset>,
     notice: Option<(&'static str, u32)>,
-    power: PowerStatus,
-    next_power_poll: u32,
     about: About,
     input_test: InputTest,
     leds: Leds,
@@ -117,27 +154,18 @@ pub struct Shell {
 }
 
 impl Shell {
-    /// Build the menu from the registry, keeping network entries only when
-    /// the board has a usable radio.
     pub fn new(has_radio: bool) -> Self {
-        let mut menu = [REBOOT; MENU_MAX];
-        let mut menu_len = 0;
-        for entry in REGISTRY {
-            if (!entry.needs_network || has_radio) && menu_len < MENU_MAX {
-                menu[menu_len] = *entry;
-                menu_len += 1;
-            }
-        }
-        Self {
-            menu,
-            menu_len,
+        let mut shell = Self {
+            has_radio,
+            current: Menu::Main,
+            entries: [item("", Action::Open(Menu::Main)); MENU_MAX],
+            len: 0,
             selected: 0,
             first: 0,
+            main_selected: 0,
             running: None,
             pending_reset: None,
             notice: None,
-            power: PowerStatus::default(),
-            next_power_poll: 0,
             about: About,
             input_test: InputTest::new(),
             leds: Leds,
@@ -146,11 +174,52 @@ impl Shell {
             photo_frame: PhotoFrame::new(),
             #[cfg(feature = "wifi")]
             network: NetworkApp,
+        };
+        shell.open(Menu::Main, 0);
+        shell
+    }
+
+    /// Show `menu`, keeping only entries the board can use.
+    fn open(&mut self, menu: Menu, selected: usize) {
+        let registry: &[Entry] = match menu {
+            Menu::Main => MAIN,
+            Menu::Settings => SETTINGS,
+            Menu::Developer => DEVELOPER,
+        };
+        self.len = 0;
+        for entry in registry {
+            if (!entry.needs_network || self.has_radio) && self.len < MENU_MAX {
+                self.entries[self.len] = *entry;
+                self.len += 1;
+            }
+        }
+        self.current = menu;
+        self.selected = selected.min(self.len.saturating_sub(1));
+        self.first = 0;
+        self.scroll_to_selected();
+    }
+
+    fn scroll_to_selected(&mut self) {
+        if self.selected < self.first {
+            self.first = self.selected;
+        } else if self.selected >= self.first + VISIBLE_ROWS {
+            self.first = self.selected + 1 - VISIBLE_ROWS;
         }
     }
 
-    fn entries(&self) -> &[Entry] {
-        &self.menu[..self.menu_len]
+    /// Name of the app on screen, or the menu shown. Reported in the heartbeat.
+    #[cfg_attr(not(feature = "wifi"), allow(dead_code))]
+    pub fn current_app(&self) -> &'static str {
+        match self.running {
+            None => match self.current {
+                Menu::Main => "Menu",
+                other => other.title(),
+            },
+            Some(id) => self.entries[..self.len]
+                .iter()
+                .find(|e| matches!(e.action, Action::Launch(x) if x == id))
+                .map_or("App", |e| e.name),
+        }
     }
 
     fn app(&mut self, id: AppId) -> &mut dyn App {
@@ -179,11 +248,6 @@ impl Shell {
             loop {
                 cortex_m::asm::nop();
             }
-        }
-
-        if ctx.now_ms.wrapping_sub(self.next_power_poll) < u32::MAX / 2 {
-            self.power = ctx.hw.power.read();
-            self.next_power_poll = ctx.now_ms.wrapping_add(POWER_POLL_MS);
         }
 
         // Settings saved on the setup portal page become the stored config.
@@ -223,7 +287,7 @@ impl Shell {
             }
         }
 
-        self.handle_menu_input(ctx);
+        self.handle_input(ctx);
         if self.running.is_some() {
             // An app was just opened. Whatever its `on_enter` drew must reach
             // the screen untouched; the menu would paint over it otherwise.
@@ -236,11 +300,12 @@ impl Shell {
         }
     }
 
-    fn handle_menu_input(&mut self, ctx: &mut Ctx) {
-        let n = self.menu_len;
+    fn handle_input(&mut self, ctx: &mut Ctx) {
+        let n = self.len.max(1);
         let up = ctx.input.repeat(Button::W) || ctx.input.repeat(Button::I);
         let down = ctx.input.repeat(Button::S) || ctx.input.repeat(Button::K);
         let select = ctx.input.just_pressed(Button::L) || ctx.input.just_pressed(Button::D);
+        let back = ctx.input.just_pressed(Button::J) || ctx.input.just_pressed(Button::A);
 
         if up {
             self.selected = (self.selected + n - 1) % n;
@@ -248,19 +313,25 @@ impl Shell {
         if down {
             self.selected = (self.selected + 1) % n;
         }
-        if self.selected < self.first {
-            self.first = self.selected;
-        } else if self.selected >= self.first + VISIBLE_ROWS {
-            self.first = self.selected + 1 - VISIBLE_ROWS;
-        }
+        self.scroll_to_selected();
 
-        if select {
-            let entry = self.menu[self.selected];
+        if back && self.current != Menu::Main {
+            self.open(Menu::Main, self.main_selected);
+            return;
+        }
+        if select && self.len > 0 {
+            let entry = self.entries[self.selected];
             match entry.action {
                 Action::Launch(id) => {
                     info!("open app: {}", entry.name);
                     self.running = Some(id);
                     self.app(id).on_enter(ctx);
+                }
+                Action::Open(menu) => {
+                    if self.current == Menu::Main {
+                        self.main_selected = self.selected;
+                    }
+                    self.open(menu, 0);
                 }
                 #[cfg(feature = "wifi")]
                 Action::ClearPhotoCache => {
@@ -268,6 +339,23 @@ impl Shell {
                         Ok(()) => "Photo cache cleared",
                         Err(_) => "Could not clear cache",
                     };
+                    self.notice = Some((text, ctx.now_ms.wrapping_add(NOTICE_MS)));
+                }
+                Action::BatterySaver => {
+                    let mut text = "Battery saver: auto";
+                    let _ = ctx.store.update_config(|c| {
+                        c.power_mode = match c.power_mode {
+                            POWER_AUTO => POWER_SAVER,
+                            POWER_SAVER => POWER_NORMAL,
+                            _ => POWER_AUTO,
+                        };
+                        text = match c.power_mode {
+                            POWER_SAVER => "Battery saver: on",
+                            POWER_NORMAL => "Battery saver: off",
+                            _ => "Battery saver: auto",
+                        };
+                    });
+                    info!("{text}");
                     self.notice = Some((text, ctx.now_ms.wrapping_add(NOTICE_MS)));
                 }
                 Action::Reboot => {
@@ -283,20 +371,24 @@ impl Shell {
     }
 
     fn draw_menu(&self, ctx: &mut Ctx) {
+        let status = power_label(&ctx.power, ctx.saver);
         let fb = &mut *ctx.fb;
-        let status = power_label(&self.power);
-        theme::screen(fb, "Sprig OS", status.as_str());
+        theme::screen(fb, self.current.title(), status.as_str());
 
-        let entries = self.entries();
+        let entries = &self.entries[..self.len];
         let end = (self.first + VISIBLE_ROWS).min(entries.len());
         let mut y = theme::CONTENT_Y;
         for (i, entry) in entries.iter().enumerate().take(end).skip(self.first) {
+            let is_menu = matches!(entry.action, Action::Open(_));
             if i == self.selected {
                 fb.fill_rect(2, y - 2, WIDTH - 4, ROW_H, theme::ACCENT_DARK);
                 fb.fill_rect(2, y - 2, 2, ROW_H, theme::ACCENT);
                 fb.draw_text(10, y, entry.name, theme::TEXT, None);
             } else {
                 fb.draw_text(10, y, entry.name, theme::MUTED, None);
+            }
+            if is_menu {
+                fb.draw_text(WIDTH - 12, y, ">", theme::MUTED, None);
             }
             y += ROW_H;
         }
@@ -307,24 +399,29 @@ impl Shell {
         if end < entries.len() {
             fb.draw_text(WIDTH - 9, theme::FOOTER_Y - CELL_HEIGHT - 2, "v", theme::MUTED, None);
         }
-        theme::footer(fb, "W/S move    L select");
+        let hint = if self.current == Menu::Main { "W/S move    L select" } else { "L select    J back" };
+        theme::footer(fb, hint);
     }
 
     fn draw_notice(&self, ctx: &mut Ctx, text: &str) {
         let fb = &mut *ctx.fb;
-        theme::screen(fb, "Sprig OS", "");
+        theme::screen(fb, self.current.title(), "");
         fb.draw_text_centered(56, text, theme::TEXT, None, 1);
     }
 }
 
-/// "USB" on external power, the battery percentage otherwise, nothing when
-/// the board cannot measure.
-fn power_label(p: &PowerStatus) -> StrBuf<8> {
-    if !p.known {
-        format(format_args!(""))
-    } else if p.usb {
-        format(format_args!("USB"))
+/// "USB" on external power, the battery percentage when it can be measured,
+/// "BAT" when only the source is known, nothing otherwise. A leading "z"
+/// marks battery saver.
+fn power_label(p: &PowerStatus, saver: bool) -> StrBuf<12> {
+    let z = if saver { "z " } else { "" };
+    if p.usb_known && p.usb {
+        format(format_args!("{z}USB"))
+    } else if p.vsys_known {
+        format(format_args!("{z}{}%", p.battery_percent()))
+    } else if p.usb_known {
+        format(format_args!("{z}BAT"))
     } else {
-        format(format_args!("{}%", p.battery_percent()))
+        format(format_args!("{z}"))
     }
 }

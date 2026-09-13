@@ -81,12 +81,23 @@ pub struct Config {
     pub frame_slot: u8,
     /// How often the frame asks the server for a new photo.
     pub poll_secs: u16,
+    /// Battery saver: 0 = auto (from the USB sense, plain Pico only),
+    /// 1 = always on, 2 = always off.
+    pub power_mode: u8,
 }
+
+pub const POWER_AUTO: u8 = 0;
+pub const POWER_SAVER: u8 = 1;
+pub const POWER_NORMAL: u8 = 2;
 
 const MAGIC: &[u8; 4] = b"SPCF";
 const VERSION: u16 = 1;
-/// Encoded size in bytes: header, payload, CRC.
-pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 4;
+/// Encoded size in bytes: header, payload, CRC. Fields added later sit at
+/// the end of the payload; older, shorter records still decode and the
+/// missing fields take their defaults. Never reorder or remove a field.
+pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 4;
+const HEADER_LEN: usize = 12;
+const CRC_LEN: usize = 4;
 
 struct Cursor<'a> {
     buf: &'a mut [u8],
@@ -162,6 +173,7 @@ pub fn encode(cfg: &Config, seq: u32, out: &mut [u8]) -> Option<usize> {
     c.put_str(&cfg.frame_last_modified)?;
     c.put(&[cfg.frame_slot])?;
     c.put(&cfg.poll_secs.to_le_bytes())?;
+    c.put(&[cfg.power_mode])?;
     let body_len = c.pos;
     let crc = crc32(&c.buf[..body_len]);
     c.put(&crc.to_le_bytes())?;
@@ -169,29 +181,34 @@ pub fn encode(cfg: &Config, seq: u32, out: &mut [u8]) -> Option<usize> {
 }
 
 /// Parse a record. Returns the config and its sequence number, or `None`
-/// if the magic, version, length or CRC do not check out.
+/// if the magic, version, length or CRC do not check out. Records written
+/// by older firmware, which are shorter, decode with defaults for the
+/// fields they lack.
 pub fn decode(buf: &[u8]) -> Option<(Config, u32)> {
     let mut r = Reader { buf, pos: 0 };
     if r.take(4)? != MAGIC || r.u16()? != VERSION {
         return None;
     }
     let len = r.u16()? as usize;
-    if len != RECORD_LEN || buf.len() < len {
+    if !(HEADER_LEN + CRC_LEN..=RECORD_LEN).contains(&len) || buf.len() < len {
         return None;
     }
-    let stored_crc = u32::from_le_bytes(buf[len - 4..len].try_into().ok()?);
-    if crc32(&buf[..len - 4]) != stored_crc {
+    let stored_crc = u32::from_le_bytes(buf[len - CRC_LEN..len].try_into().ok()?);
+    if crc32(&buf[..len - CRC_LEN]) != stored_crc {
         return None;
     }
     let seq = r.u32()?;
+    // Read fields from the payload only; anything past its end is absent.
+    let mut r = Reader { buf: &buf[..len - CRC_LEN], pos: HEADER_LEN };
     let cfg = Config {
-        wifi_ssid: r.str()?,
-        wifi_password: r.str()?,
-        frame_server: r.str()?,
-        frame_name: r.str()?,
-        frame_last_modified: r.str()?,
-        frame_slot: r.u8()?,
-        poll_secs: r.u16()?,
+        wifi_ssid: r.str().unwrap_or_default(),
+        wifi_password: r.str().unwrap_or_default(),
+        frame_server: r.str().unwrap_or_default(),
+        frame_name: r.str().unwrap_or_default(),
+        frame_last_modified: r.str().unwrap_or_default(),
+        frame_slot: r.u8().unwrap_or(0),
+        poll_secs: r.u16().unwrap_or(15),
+        power_mode: r.u8().unwrap_or(POWER_AUTO),
     };
     Some((cfg, seq))
 }
@@ -209,7 +226,33 @@ mod tests {
         c.frame_last_modified.set("Sat, 13 Sep 2026 10:00:00 GMT");
         c.frame_slot = 1;
         c.poll_secs = 15;
+        c.power_mode = POWER_SAVER;
         c
+    }
+
+    /// A record as older firmware wrote it: same layout without the
+    /// trailing `power_mode` byte, with its own length and CRC.
+    fn older_record(cfg: &Config, seq: u32) -> Vec<u8> {
+        let mut buf = [0u8; 512];
+        let n = encode(cfg, seq, &mut buf).unwrap();
+        let mut old = buf[..n - CRC_LEN - 1].to_vec(); // drop power_mode and the CRC
+        let len = (old.len() + CRC_LEN) as u16;
+        old[6..8].copy_from_slice(&len.to_le_bytes());
+        let crc = crc32(&old);
+        old.extend_from_slice(&crc.to_le_bytes());
+        old
+    }
+
+    #[test]
+    fn decodes_records_from_older_firmware() {
+        let old = older_record(&sample(), 7);
+        assert_eq!(old.len(), RECORD_LEN - 1);
+        let (cfg, seq) = decode(&old).unwrap();
+        assert_eq!(seq, 7);
+        assert_eq!(cfg.wifi_ssid, sample().wifi_ssid);
+        assert_eq!(cfg.frame_slot, 1);
+        assert_eq!(cfg.poll_secs, 15);
+        assert_eq!(cfg.power_mode, POWER_AUTO, "missing field takes its default");
     }
 
     #[test]

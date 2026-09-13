@@ -1,6 +1,8 @@
 #!/bin/sh
-# Flash an ELF to a Sprig in BOOTSEL mode over USB, verify it, then run it.
+# Flash the OS ELF to a Sprig in USB mode, verify it, then reboot into it.
 # Used as the cargo runner, so `cargo run --release` flashes the board.
-# picotool needs `-t elf` after the file name, which cargo cannot do itself.
+# The OS lives behind the boot loader, so picotool's own "execute" flag
+# cannot be used; a plain reboot starts the boot loader, which starts the OS.
 set -eu
-exec picotool load -v -x "$1" -t elf
+picotool load -v "$1" -t elf
+picotool reboot

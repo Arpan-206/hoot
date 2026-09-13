@@ -144,8 +144,14 @@ impl Input {
     }
 
     /// Bit mask of buttons currently down.
-    #[allow(dead_code)]
     pub fn held_mask(&self) -> u8 {
         self.stable
+    }
+
+    /// Forget this poll's presses and repeats, so apps do not act on a key
+    /// that only served to wake the screen.
+    pub fn swallow(&mut self) {
+        self.prev = self.stable;
+        self.repeat = 0;
     }
 }

@@ -41,7 +41,16 @@ impl App for About {
             other => format(format_args!("{}", other.label())),
         };
         let display_dma = ctx.hw.display_dma;
-        let power = ctx.hw.power.read();
+        let power = ctx.power;
+        let saver: StrBuf<16> = format(format_args!(
+            "{} ({})",
+            if ctx.saver { "on" } else { "off" },
+            match ctx.store.config().power_mode {
+                sprig_proto::record::POWER_SAVER => "manual",
+                sprig_proto::record::POWER_NORMAL => "manual",
+                _ => "auto",
+            }
+        ));
         let secs = ctx.now_ms / 1000;
         let uptime: StrBuf<12> = format(format_args!(
             "{:02}:{:02}:{:02}",
@@ -49,15 +58,20 @@ impl App for About {
             (secs / 60) % 60,
             secs % 60
         ));
-        let volts: StrBuf<16> = if power.known {
+        let source = match (power.usb_known, power.usb) {
+            (true, true) => "USB",
+            (true, false) => "battery",
+            (false, _) => "unknown",
+        };
+        let volts: StrBuf<20> = if power.vsys_known {
             format(format_args!(
                 "{}.{:02} V {}",
                 power.vsys_mv / 1000,
                 (power.vsys_mv % 1000) / 10,
-                if power.usb { "USB" } else { "BAT" }
+                source
             ))
         } else {
-            format(format_args!("n/a on Pico W"))
+            format(format_args!("{source}"))
         };
         let frame: StrBuf<12> = format(format_args!("{} ms", ctx.frame_ms));
 
@@ -78,6 +92,8 @@ impl App for About {
         row(fb, y, "Uptime", uptime.as_str());
         y += step;
         row(fb, y, "Power", volts.as_str());
+        y += step;
+        row(fb, y, "Saver", saver.as_str());
         y += step;
         row(fb, y, "Frame", frame.as_str());
         theme::footer(fb, "J back");
