@@ -1240,6 +1240,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "qrcodegen-no-heap"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0e2c0bf8be8a1c4a4f48973dabf26943f05da2bfc2d3180aae62409dbba6f0c"
+
+[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1490,6 +1496,7 @@ dependencies = [
  "cyw43",
  "cyw43-pio",
  "embassy-executor",
+ "embassy-futures",
  "embassy-net",
  "embassy-rp",
  "embassy-sync",
@@ -1501,6 +1508,7 @@ dependencies = [
  "embedded-io-async 0.7.0",
  "log",
  "portable-atomic",
+ "qrcodegen-no-heap",
  "sprig-gfx",
  "sprig-proto",
  "static_cell",

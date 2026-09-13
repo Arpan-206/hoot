@@ -23,7 +23,7 @@ a 160x128 colour display, eight buttons, two white LEDs and a speaker.
 | Flash storage: config record and 64 KiB blob slots | Done, untested on hardware |
 | Wi-Fi, DHCP, DNS and HTTP client (Pico W, `wifi` feature) | Done, untested on hardware |
 | Photo frame app | Done, untested on hardware |
-| Wi-Fi setup on the device | Not started. Credentials come from `secrets.toml` |
+| Wi-Fi setup on the device: hotspot, QR code, captive portal | Done, untested on hardware |
 | Kernel panic indicator (both LEDs blink) | Done |
 | Audio (I2S) | Not started |
 | USB serial console | Not started |
@@ -117,6 +117,7 @@ hung, unplug the Sprig. The stuck command then exits on its own.
 | Display test | Any key | Next pattern |
 | Photo frame | Hold L for 2 s | Forget the cached photo time and fetch again |
 | Network (Pico W only) | L or D | Connect to Wi-Fi |
+| Network (Pico W only) | K | Open the setup hotspot |
 | Menu: Clear photo cache | L | Erase both photo slots and the stored timestamp |
 | Menu: Reboot | L | Normal reset |
 | Menu: Reboot to USB | L | Reset into the USB flash mode |
@@ -131,6 +132,30 @@ hung, unplug the Sprig. The stuck command then exits on its own.
 4. In "Input test" every key lights up when pressed.
 5. "About" names the right module: Pico or Pico W. A Pico W has a metal
    can and a small antenna area at the end of the module.
+
+## Wi-Fi setup on the device
+
+The Sprig sets itself up the way the ESP32 frame does, without a rebuild.
+
+1. The setup hotspot opens by itself when no network is saved, when the
+   saved network refuses three joins in a row, or when you press K in the
+   Network app. The screen shows a QR code and three steps.
+2. Scan the code with a phone, or join the open Wi-Fi `Sprig-Setup`.
+3. A page opens by itself. If it does not, open `http://192.168.4.1`.
+4. Pick your network from the list, type the password, check the photo
+   server and frame name, tap Save.
+
+The Sprig stores the settings, closes the hotspot and joins your network.
+The hotspot gives up after five minutes and retries the saved network.
+
+How it works: while still a station the Sprig scans for networks. It then
+starts an open access point with a fixed address, and runs three small
+servers. DHCP hands the phone an address. DNS answers every name with the
+Sprig's address, so the phone's connectivity check lands on the page.
+The web server serves the page, and redirects every other path to it.
+The packet formats live in `proto/` and are unit-tested on the host.
+
+`os/secrets.toml` is now only a convenience for development builds.
 
 ## Photo frame
 
@@ -177,12 +202,12 @@ there reboots into USB flash mode.
 | Path | Contents |
 | --- | --- |
 | `gfx/` | `sprig-gfx`: framebuffer, RGB565 colour, 5x7 font. No hardware code. |
-| `proto/` | `sprig-proto`: URL and HTTP parsing, CRC-32, config record. No hardware code. |
+| `proto/` | `sprig-proto`: URL, HTTP, form, DHCP and DNS codecs, CRC-32, config record. No hardware code. |
 | `os/src/main.rs` | Boot sequence and the shell task (the frame loop) |
 | `os/src/board.rs` | Pin map and display constants |
 | `os/src/drivers/` | ST7735, buttons, PWM dimmer, power monitor, module detection |
 | `os/src/storage/` | Config store and blob slots in flash |
-| `os/src/net/` | Network handle for apps, HTTP client, Wi-Fi task |
+| `os/src/net/` | Network handle for apps, HTTP client, Wi-Fi task, setup portal with DHCP and DNS servers |
 | `os/src/ui/` | Theme, text formatting, splash, shell |
 | `os/src/apps/` | The `App` trait, the app template, and the built-in apps |
 | `os/firmware/cyw43/` | Radio firmware blobs (Infineon permissive binary license) |
@@ -246,11 +271,9 @@ Flash its UF2 the same way as above.
 
 ## Next steps
 
-1. Test the photo frame on a Pico W and fix what the hardware reveals.
-2. Wi-Fi setup on the device: an on-screen keyboard or a setup hotspot,
-   so credentials no longer come from the build.
-3. USB serial console for logging (`embassy-usb`).
-4. WASM app runtime (`wasmi`) with the network and storage API as host
+1. Test the setup portal with a phone and fix what the hardware reveals.
+2. Seen button and a message cue in the photo frame.
+3. WASM app runtime (`wasmi`) with the network and storage API as host
    functions. Measure flash, RAM and speed first.
-5. Firmware and app updates over the air with `embassy-boot`.
-6. I2S audio.
+4. Firmware and app updates over the air with `embassy-boot`.
+5. I2S audio.

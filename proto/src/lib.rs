@@ -7,6 +7,9 @@
 #![deny(unsafe_code)]
 
 pub mod crc32;
+pub mod dhcp;
+pub mod dns;
+pub mod form;
 pub mod http;
 pub mod record;
 pub mod url;

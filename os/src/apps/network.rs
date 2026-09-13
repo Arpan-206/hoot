@@ -33,8 +33,16 @@ impl App for NetworkApp {
         if ctx.input.just_pressed(Button::L) || ctx.input.just_pressed(Button::D) {
             ctx.net.request_connect();
         }
+        if ctx.input.just_pressed(Button::K) {
+            ctx.net.request_portal();
+        }
 
         let state = ctx.net.state();
+        if state == NetState::Portal {
+            crate::ui::setup::draw(ctx.fb);
+            theme::footer(ctx.fb, "J back");
+            return Transition::Stay;
+        }
         let ssid = ctx.net.ssid();
         let has_radio = ctx.net.has_radio();
         let module = ctx.hw.module;
@@ -63,7 +71,7 @@ impl App for NetworkApp {
         } else if !has_radio {
             fb.draw_text(LABEL_X, y, "This module has no radio.", theme::MUTED, None);
         }
-        theme::footer(fb, if has_radio { "L connect   J back" } else { "J back" });
+        theme::footer(fb, if has_radio { "L connect  K setup  J back" } else { "J back" });
         Transition::Stay
     }
 }

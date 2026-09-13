@@ -186,9 +186,27 @@ impl Shell {
             self.next_power_poll = ctx.now_ms.wrapping_add(POWER_POLL_MS);
         }
 
+        // Settings saved on the setup portal page become the stored config.
+        #[cfg(feature = "wifi")]
+        if let Some(saved) = ctx.net.take_portal_result() {
+            let outcome = ctx.store.update_config(|c| {
+                c.wifi_ssid = saved.ssid;
+                c.wifi_password = saved.password;
+                if c.frame_server != saved.server || c.frame_name != saved.name {
+                    c.frame_last_modified.clear();
+                }
+                c.frame_server = saved.server;
+                c.frame_name = saved.name;
+            });
+            info!("settings from portal stored: {:?}", outcome.is_ok());
+            if self.running.is_none() {
+                self.notice = Some(("Settings saved", ctx.now_ms.wrapping_add(NOTICE_MS)));
+            }
+        }
+
         if let Some(id) = self.running {
             if self.app(id).update(ctx) == Transition::Exit {
-                log::info!("close app");
+                info!("close app");
                 self.app(id).on_exit(ctx);
                 self.running = None;
                 ctx.fb.mark_dirty();
@@ -240,7 +258,7 @@ impl Shell {
             let entry = self.menu[self.selected];
             match entry.action {
                 Action::Launch(id) => {
-                    log::info!("open app: {}", entry.name);
+                    info!("open app: {}", entry.name);
                     self.running = Some(id);
                     self.app(id).on_enter(ctx);
                 }
@@ -253,11 +271,11 @@ impl Shell {
                     self.notice = Some((text, ctx.now_ms.wrapping_add(NOTICE_MS)));
                 }
                 Action::Reboot => {
-                    log::info!("reboot requested");
+                    info!("reboot requested");
                     self.pending_reset = Some(PendingReset::Normal);
                 }
                 Action::RebootToUsb => {
-                    log::info!("reboot to USB requested");
+                    info!("reboot to USB requested");
                     self.pending_reset = Some(PendingReset::Usb);
                 }
             }

@@ -17,7 +17,7 @@ use embassy_rp::pio::Pio;
 use embassy_time::{Duration, Timer, with_timeout};
 use static_cell::StaticCell;
 
-use super::{JobState, NetState, SMALL_BODY_MAX, Sink, WAKE, http, with};
+use super::{JobState, NetState, SMALL_BODY_MAX, Sink, WAKE, http, portal, with};
 use crate::hw::Irqs;
 use crate::storage::FlashMutex;
 
@@ -25,6 +25,8 @@ type Cyw43Runner = cyw43::Runner<'static, cyw43::SpiBus<Output<'static>, PioSpi<
 
 const DHCP_TIMEOUT: Duration = Duration::from_secs(20);
 const RETRY_DELAY: Duration = Duration::from_secs(5);
+/// After this many failed joins in a row the setup portal opens.
+const MAX_JOIN_FAILURES: u8 = 3;
 
 #[embassy_executor::task]
 async fn cyw43_runner(runner: Cyw43Runner) -> ! {
@@ -53,7 +55,7 @@ pub async fn wifi_service(spawner: Spawner, pins: RadioPins, flash: &'static Fla
         WAKE.wait().await;
     }
     with(|s| s.state = NetState::Starting);
-    log::info!("wifi: powering radio, loading firmware");
+    info!("wifi: powering radio, loading firmware");
 
     let pwr = Output::new(pins.pwr, embassy_rp::gpio::Level::Low);
     let cs = Output::new(pins.cs, embassy_rp::gpio::Level::High);
@@ -77,12 +79,14 @@ pub async fn wifi_service(spawner: Spawner, pins: RadioPins, flash: &'static Fla
     let (device, mut control, runner) =
         cyw43::new(STATE.init(cyw43::State::new()), pwr, spi, fw, nvram).await;
     spawner.spawn(cyw43_runner(runner).unwrap());
-    log::info!("wifi: firmware loaded, initialising");
+    info!("wifi: firmware loaded, initialising");
     control.init(clm).await;
     control.set_power_management(PowerManagementMode::PowerSave).await;
-    log::info!("wifi: radio ready");
+    info!("wifi: radio ready");
 
-    static RESOURCES: StaticCell<StackResources<4>> = StaticCell::new();
+    // Sockets: DHCP client, DNS client, HTTP client, and the portal's DHCP,
+    // DNS and HTTP servers.
+    static RESOURCES: StaticCell<StackResources<6>> = StaticCell::new();
     let seed = RoscRng.next_u64();
     let (stack, runner) = embassy_net::new(
         device,
@@ -93,53 +97,88 @@ pub async fn wifi_service(spawner: Spawner, pins: RadioPins, flash: &'static Fla
     spawner.spawn(net_runner(runner).unwrap());
 
     let mut small = [0u8; SMALL_BODY_MAX];
+    let mut failures: u8 = 0;
     loop {
-        let (ssid, password) = with(|s| (s.ssid, s.password));
+        let (ssid, password, portal_wanted) = with(|s| (s.ssid, s.password, s.portal_requested));
+
+        // Setup portal: on request, when nothing is configured, or when the
+        // saved network keeps refusing us.
+        if portal_wanted || ssid.is_empty() || failures >= MAX_JOIN_FAILURES {
+            with(|s| {
+                s.portal_requested = false;
+                s.state = NetState::Portal;
+            });
+            control.leave().await;
+            info!("portal: opening setup hotspot");
+            if let Some(result) = portal::run(&mut control, stack).await {
+                info!("portal: settings saved, network '{}'", result.ssid.as_str());
+                with(|s| {
+                    s.ssid = result.ssid;
+                    s.password = result.password;
+                    s.server = result.server;
+                    s.name = result.name;
+                    s.portal_result = Some(result);
+                });
+            }
+            failures = 0;
+            if with(|s| s.ssid.is_empty()) {
+                // Still nothing to join: reopen the portal after a moment.
+                Timer::after_secs(1).await;
+            }
+            continue;
+        }
+
         with(|s| s.state = NetState::Joining);
-        log::info!("wifi: joining '{}'", ssid.as_str());
+        info!("wifi: joining '{}'", ssid.as_str());
         let options = if password.is_empty() {
             JoinOptions::new_open()
         } else {
             JoinOptions::new(password.as_str().as_bytes())
         };
         if let Err(e) = control.join(ssid.as_str(), options).await {
-            log::warn!("wifi: join failed: {:?}", e);
+            warn!("wifi: join failed: {:?}", e);
             with(|s| s.state = NetState::JoinFailed);
+            failures += 1;
             Timer::after(RETRY_DELAY).await;
             continue;
         }
 
         with(|s| s.state = NetState::Dhcp);
-        log::info!("wifi: joined, waiting for DHCP");
+        info!("wifi: joined, waiting for DHCP");
         if with_timeout(DHCP_TIMEOUT, stack.wait_config_up()).await.is_err() {
-            log::warn!("wifi: no DHCP lease within {} s", DHCP_TIMEOUT.as_secs());
+            warn!("wifi: no DHCP lease within {} s", DHCP_TIMEOUT.as_secs());
             with(|s| s.state = NetState::JoinFailed);
+            failures += 1;
             control.leave().await;
             Timer::after(RETRY_DELAY).await;
             continue;
         }
+        failures = 0;
         let ip = stack
             .config_v4()
             .map(|c| c.address.address().octets())
             .unwrap_or([0; 4]);
         with(|s| s.state = NetState::Up(ip));
-        log::info!("wifi: up, ip {}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]);
+        info!("wifi: up, ip {}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]);
 
         // Serve requests until the link drops.
         loop {
             if !stack.is_link_up() || !stack.is_config_up() {
-                log::warn!("wifi: link lost, rejoining");
+                warn!("wifi: link lost, rejoining");
                 with(|s| s.state = NetState::Lost);
+                break;
+            }
+            if with(|s| s.portal_requested) {
                 break;
             }
             let request = with(|s| s.request.take());
             match request {
                 Some(req) => {
-                    log::info!("http: GET {}", req.url.as_str());
+                    info!("http: GET {}", req.url.as_str());
                     let outcome = http::fetch(stack, &req, flash, &mut small).await;
                     match &outcome {
-                        Ok(r) => log::info!("http: {} ({} bytes)", r.status, r.len),
-                        Err(e) => log::warn!("http: {}", e.label()),
+                        Ok(r) => info!("http: {} ({} bytes)", r.status, r.len),
+                        Err(e) => warn!("http: {}", e.label()),
                     }
                     with(|s| match outcome {
                         Ok(r) => {

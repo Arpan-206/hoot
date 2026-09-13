@@ -8,6 +8,9 @@
 #![no_std]
 #![no_main]
 
+#[macro_use]
+mod logging;
+
 mod apps;
 mod board;
 mod drivers;
@@ -28,7 +31,6 @@ use embassy_rp::pwm::{self, Pwm};
 use embassy_rp::spi::{self, Spi};
 use embassy_rp::usb;
 use embassy_rp::watchdog::Watchdog;
-use log::info;
 use embassy_sync::blocking_mutex::Mutex;
 use embassy_time::{Delay, Duration, Instant, Ticker, Timer, with_timeout};
 use sprig_gfx::Framebuffer;
@@ -73,7 +75,7 @@ async fn push_frame(display: &mut Display, fb: &Framebuffer, dma_ok: &mut bool) 
             return;
         }
         *dma_ok = false;
-        log::warn!("DMA frame transfer timed out; using blocking transfers from now on");
+        warn!("DMA frame transfer timed out; using blocking transfers from now on");
     }
     display.write_frame(fb.as_bytes());
 }
@@ -114,6 +116,7 @@ async fn main(spawner: Spawner) {
     let display = DISPLAY.init(St7735::new(spi, cs, dc, rst));
     display.init(&mut Delay);
     let fb = FRAMEBUFFER.take();
+    fb.mark_dirty();
     panic::arm(display, fb);
     info!("display up");
 
@@ -168,7 +171,7 @@ async fn main(spawner: Spawner) {
             let vbus = GpioInput::new(p.PIN_24, Pull::None);
             // Keep the Pico's own LED off.
             let _led = Output::new(p.PIN_25, Level::Low);
-            (Power::new(adc, Some(vsys), Some(vbus)), NetHandle::new(false, "", ""))
+            (Power::new(adc, Some(vsys), Some(vbus)), NetHandle::new(false, store.config()))
         }
         Module::PicoW => {
             #[cfg(feature = "wifi")]
@@ -187,8 +190,7 @@ async fn main(spawner: Spawner) {
                 )
                 .unwrap(),
             );
-            let cfg = store.config();
-            let net = NetHandle::new(has_radio, cfg.wifi_ssid.as_str(), cfg.wifi_password.as_str());
+            let net = NetHandle::new(has_radio, store.config());
             (Power::new(adc, None, None), net)
         }
     };

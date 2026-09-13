@@ -39,7 +39,7 @@ const SLOT_B: u8 = 1;
 /// Forget the cached photo: both slots and the stored timestamp. The next
 /// visit to the app fetches the photo afresh.
 pub fn clear_cache(store: &mut Storage) -> Result<(), StorageError> {
-    log::info!("photo: clearing cache");
+    info!("photo: clearing cache");
     store.blob_erase(SLOT_A)?;
     store.blob_erase(SLOT_B)?;
     store.update_config(|c| {
@@ -134,7 +134,7 @@ impl PhotoFrame {
             if_modified_since: if self.force { FixedStr::new() } else { cfg.frame_last_modified },
             sink: Sink::Blob { slot, kind: KIND_PHOTO },
         };
-        log::info!("photo: fetch {} into slot {}", request.url.as_str(), slot);
+        info!("photo: fetch {} into slot {}", request.url.as_str(), slot);
         match ctx.net.fetch(request) {
             Ok(()) => {
                 self.fetching = true;
@@ -145,7 +145,7 @@ impl PhotoFrame {
     }
 
     fn fail(&mut self, now: u32, what: &str) {
-        log::warn!("photo: {what} (failure {})", self.fails + 1);
+        warn!("photo: {what} (failure {})", self.fails + 1);
         self.fails = self.fails.saturating_add(1);
         self.last_error = format(format_args!("{what}"));
         self.next_poll_ms = now.wrapping_add(RETRY_MS);
@@ -154,7 +154,7 @@ impl PhotoFrame {
 
     fn finish(&mut self, ctx: &mut Ctx, r: FetchResult) {
         let now = ctx.now_ms;
-        log::info!("photo: HTTP {} len {} last-modified '{}'", r.status, r.len, r.last_modified.as_str());
+        info!("photo: HTTP {} len {} last-modified '{}'", r.status, r.len, r.last_modified.as_str());
         match r.status {
             200 if r.len as usize == BYTES => {
                 let slot = self.pending_slot;
@@ -188,6 +188,10 @@ impl PhotoFrame {
     }
 
     fn draw_status(&self, ctx: &mut Ctx, state: NetState) {
+        if state == NetState::Portal {
+            crate::ui::setup::draw(ctx.fb);
+            return;
+        }
         let has_radio = ctx.net.has_radio();
         let server = ctx.store.config().frame_server;
         let name = ctx.store.config().frame_name;
@@ -229,7 +233,7 @@ impl App for PhotoFrame {
     fn on_enter(&mut self, ctx: &mut Ctx) {
         let slot = ctx.store.config().frame_slot;
         self.photo_on_screen = Self::show_slot(ctx, slot);
-        log::info!("photo: enter, cached photo in slot {}: {}", slot, self.photo_on_screen);
+        info!("photo: enter, cached photo in slot {}: {}", slot, self.photo_on_screen);
         self.fetching = false;
         self.force = false;
         self.fails = 0;

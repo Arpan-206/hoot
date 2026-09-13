@@ -26,9 +26,11 @@ impl Default for Framebuffer {
 }
 
 impl Framebuffer {
-    /// An all-black frame. `const`, so it can live in a `static`.
+    /// An all-black, clean frame. `const` and all zeros, so a `static`
+    /// framebuffer lands in `.bss` and costs no flash and no boot-time copy.
+    /// Call `mark_dirty` if the first frame must be sent unconditionally.
     pub const fn new() -> Self {
-        Self { data: [0; BYTES], dirty: true }
+        Self { data: [0; BYTES], dirty: false }
     }
 
     /// Raw bytes, ready to stream to the display.
@@ -235,7 +237,9 @@ mod tests {
     #[test]
     fn dirty_flag_tracks_drawing() {
         let mut fb = fb();
-        assert!(fb.take_dirty(), "a new frame must be sent once");
+        assert!(!fb.is_dirty(), "a new frame starts clean and all-zero");
+        fb.mark_dirty();
+        assert!(fb.take_dirty());
         assert!(!fb.take_dirty());
         fb.set(-1, -1, Rgb565::WHITE);
         assert!(!fb.is_dirty(), "clipped pixels do not dirty the frame");

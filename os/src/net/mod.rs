@@ -16,7 +16,13 @@
 #![cfg_attr(not(feature = "wifi"), allow(dead_code))]
 
 #[cfg(feature = "wifi")]
+pub mod dhcp;
+#[cfg(feature = "wifi")]
+pub mod dns;
+#[cfg(feature = "wifi")]
 pub mod http;
+#[cfg(feature = "wifi")]
+pub mod portal;
 #[cfg(feature = "wifi")]
 pub mod wifi;
 
@@ -27,6 +33,13 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 
 pub use sprig_proto::record::FixedStr;
+
+use crate::storage::Config;
+
+/// Name of the open setup hotspot.
+pub const PORTAL_SSID: &str = "Sprig-Setup";
+/// The Sprig's address while the hotspot is up.
+pub const PORTAL_IP: [u8; 4] = [192, 168, 4, 1];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum NetState {
@@ -43,6 +56,8 @@ pub enum NetState {
     JoinFailed,
     /// Was up, link went away. The service rejoins by itself.
     Lost,
+    /// Running the setup hotspot and captive portal.
+    Portal,
 }
 
 impl NetState {
@@ -56,6 +71,7 @@ impl NetState {
             NetState::Up(_) => "Connected",
             NetState::JoinFailed => "Join failed",
             NetState::Lost => "Lost",
+            NetState::Portal => "Setup mode",
         }
     }
 
@@ -122,6 +138,15 @@ impl FetchError {
     }
 }
 
+/// Settings entered on the captive portal page.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct PortalResult {
+    pub ssid: FixedStr<32>,
+    pub password: FixedStr<64>,
+    pub server: FixedStr<96>,
+    pub name: FixedStr<24>,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum JobState {
     Idle,
@@ -136,8 +161,14 @@ pub const SMALL_BODY_MAX: usize = 512;
 pub struct Shared {
     pub state: NetState,
     pub connect_requested: bool,
+    pub portal_requested: bool,
+    /// Filled by the portal when the user saves; the shell persists it.
+    pub portal_result: Option<PortalResult>,
     pub ssid: FixedStr<32>,
     pub password: FixedStr<64>,
+    /// Photo server and frame name, shown as defaults on the portal page.
+    pub server: FixedStr<96>,
+    pub name: FixedStr<24>,
     pub request: Option<FetchRequest>,
     pub job: JobState,
     pub small_body: [u8; SMALL_BODY_MAX],
@@ -149,8 +180,12 @@ impl Shared {
         Self {
             state: NetState::NoRadio,
             connect_requested: false,
+            portal_requested: false,
+            portal_result: None,
             ssid: FixedStr::new(),
             password: FixedStr::new(),
+            server: FixedStr::new(),
+            name: FixedStr::new(),
             request: None,
             job: JobState::Idle,
             small_body: [0; SMALL_BODY_MAX],
@@ -174,11 +209,13 @@ pub struct NetHandle {
 }
 
 impl NetHandle {
-    pub fn new(has_radio: bool, ssid: &str, password: &str) -> Self {
+    pub fn new(has_radio: bool, cfg: &Config) -> Self {
         with(|s| {
             s.state = if has_radio { NetState::Off } else { NetState::NoRadio };
-            s.ssid.set(ssid);
-            s.password.set(password);
+            s.ssid = cfg.wifi_ssid;
+            s.password = cfg.wifi_password;
+            s.server = cfg.frame_server;
+            s.name = cfg.frame_name;
         });
         Self { has_radio }
     }
@@ -204,12 +241,31 @@ impl NetHandle {
         });
     }
 
+    /// Open the setup hotspot and captive portal. The radio is powered if
+    /// it is not yet. Nothing happens without a radio.
+    pub fn request_portal(&mut self) {
+        if !self.has_radio {
+            return;
+        }
+        info!("net: setup portal requested");
+        with(|s| {
+            s.connect_requested = true;
+            s.portal_requested = true;
+        });
+        WAKE.signal(());
+    }
+
+    /// Settings saved on the portal page, once. The caller persists them.
+    pub fn take_portal_result(&mut self) -> Option<PortalResult> {
+        with(|s| s.portal_result.take())
+    }
+
     /// Ask the service to bring the network up. Safe to call repeatedly.
     pub fn request_connect(&mut self) {
         if !self.has_radio {
             return;
         }
-        log::info!("net: connect requested");
+        info!("net: connect requested");
         with(|s| s.connect_requested = true);
         WAKE.signal(());
     }

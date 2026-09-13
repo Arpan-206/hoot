@@ -16,7 +16,8 @@ cortex-m-rt = "0.7.6"
 cyw43 = { version = "0.7.0", optional = true }
 cyw43-pio = { version = "0.10.0", optional = true }
 embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread"] }
-embassy-net = { version = "0.9.1", features = ["proto-ipv4", "tcp", "dhcpv4", "dns", "medium-ethernet"], optional = true }
+embassy-futures = { version = "0.1.2", optional = true }
+embassy-net = { version = "0.9.1", features = ["proto-ipv4", "tcp", "udp", "dhcpv4", "dns", "medium-ethernet"], optional = true }
 embassy-rp = { version = "0.10.0", features = ["rp2040", "time-driver", "critical-section-impl", "boot2-w25q080"] }
 embassy-sync = "0.8.0"
 embassy-time = "0.5.1"
@@ -27,6 +28,7 @@ embedded-hal-async = "1.0.0"
 embedded-io-async = { version = "0.7.0", optional = true }
 log = "0.4.34"
 portable-atomic = { version = "1.15.0", features = ["critical-section"] }
+qrcodegen-no-heap = { version = "1.8.1", optional = true }
 sprig-gfx = { path = "../gfx" }
 sprig-proto = { path = "../proto" }
 static_cell = "2.1.1"
@@ -35,4 +37,4 @@ static_cell = "2.1.1"
 default = []
 # Wi-Fi for the Pico W: radio driver, TCP/IP stack and the 230 KiB radio
 # firmware. Leave it off for a plain Pico to save flash and RAM.
-wifi = ["dep:cyw43", "dep:cyw43-pio", "dep:embassy-net", "dep:embedded-io-async"]
+wifi = ["dep:cyw43", "dep:cyw43-pio", "dep:embassy-net", "dep:embedded-io-async", "dep:qrcodegen-no-heap", "dep:embassy-futures"]
