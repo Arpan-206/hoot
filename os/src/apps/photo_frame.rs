@@ -303,7 +303,7 @@ impl PhotoFrame {
         };
         let color = if !has_radio || !self.last_error.is_empty() { theme::WARN } else { theme::TEXT };
         row(fb, y, "Status", status, color);
-        theme::footer(fb, "K play   hold L refetch   J back");
+        theme::footer(fb, "K play   hold L: refetch");
     }
 }
 
