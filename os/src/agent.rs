@@ -10,6 +10,8 @@
 //! rebooting into it. All requests use the system lane of the network
 //! service, so an app can never block them.
 
+use portable_atomic::{AtomicU8, Ordering};
+
 use crate::VERSION;
 use crate::apps::photo_frame;
 use crate::net::{Body, FetchRequest, FetchResult, FixedStr, JobState, Lane, NetHandle, Sink};
@@ -25,6 +27,17 @@ const RETRY_MS: u32 = 15_000;
 const OTA_FIRST_MS: u32 = 60_000;
 const OTA_EVERY_MS: u32 = 6 * 60 * 60 * 1000;
 const LOG_POST_MS: u32 = 60_000;
+
+/// Unread messages waiting on the server, from the last heartbeat.
+static UNREAD: AtomicU8 = AtomicU8::new(0);
+
+pub fn unread() -> u8 {
+    UNREAD.load(Ordering::Relaxed)
+}
+
+pub fn set_unread(n: u8) {
+    UNREAD.store(n, Ordering::Relaxed);
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Job {
@@ -184,6 +197,7 @@ impl Agent {
             self.fails = self.fails.saturating_add(1);
         } else {
             self.fails = 0;
+            set_unread(r.unread);
         }
         if !r.command.is_empty() {
             self.run_command(net, store, now, r.command.as_str());

@@ -28,6 +28,8 @@ a 160x128 colour display, eight buttons, two white LEDs and a speaker.
 | Firmware updates over the air from the photo server | Done |
 | Heartbeat, remote warnings and server commands | Done, verified |
 | Battery saver: idle dimming, slower polling | Done |
+| Messages app with unread badge and LED cue | Done |
+| Pomodoro, Fireplace, Aquarium | Done |
 | Kernel panic indicator (both LEDs blink) | Done |
 | Audio (I2S) | Not started |
 | USB serial console | Not started |
@@ -115,14 +117,22 @@ hung, unplug the Sprig. The stuck command then exits on its own.
 
 ## Controls
 
-The menu has two levels. Apps sit at the top, with Settings and Developer
-folded away.
+The menu has two levels. Apps are grouped: the top level shows one entry
+per group, then About, Settings and Developer. An app never sits on the
+top level by itself. Each app names its group, and the shell builds the
+submenus from that. A group with nothing usable on the board is hidden.
 
 | Menu | Entries |
 | --- | --- |
-| Top | Photo frame, About, Settings, Developer |
+| Top | Frame, Fun, Tools, About, Settings, Developer |
+| Frame | Photo frame, Messages |
+| Fun | Fireplace, Aquarium |
+| Tools | Pomodoro |
 | Settings | Network, Battery saver, Clear photo cache, Reboot, Reboot to USB |
 | Developer | Input test, LEDs & backlight, Display test |
+
+Frame and its apps exist only in Wi-Fi builds. The unread count for
+Messages also shows next to Frame on the top menu.
 
 | Where | Button | Action |
 | --- | --- | --- |
@@ -134,6 +144,9 @@ folded away.
 | LEDs app | W/S, I/K, A/D | Left LED, right LED, backlight |
 | Display test | Any key | Next pattern |
 | Photo frame | Hold L for 2 s | Forget the cached photo time and fetch again |
+| Messages | W/S, L, K | Move, mark the selected message seen, refresh |
+| Pomodoro | L, K | Start or pause, stop. W/S and A/D set the lengths while ready |
+| Fireplace | W/S | More or less fuel |
 | Network (Pico W only) | L or D | Connect to Wi-Fi |
 | Network (Pico W only) | K | Open the setup hotspot |
 | Settings: Clear photo cache | L | Erase both photo slots and the stored timestamp |
@@ -215,6 +228,16 @@ What saver does:
 The radio already sleeps between packets in every mode, and the display
 is only written when something changed, so the rest of the system idles
 by itself.
+
+## Messages
+
+Two separate channels come from the web page. "Send a message" writes the
+caption baked into the photo, as it always did. "Send a note" goes to the
+Messages app on the Sprig and never touches the picture. The server keeps
+the notes per frame. The agent's heartbeat brings back the unread count;
+the menu shows it as a badge on Messages, and the right LED pulses softly
+while anything is unread. Marking a note seen in the app gives the sender
+the double tick on the web page.
 
 ## Wi-Fi setup on the device
 
@@ -328,7 +351,7 @@ Every app has the same shape. Read the module docs at the top of
 and an `App` implementation with `on_enter`, `update` and `on_exit`.
 `update` runs each frame and must not block. Long work goes to a service
 and is polled the next frame. Register the app in the registry in
-`os/src/ui/shell.rs`. Set `needs_network: true` if the app cannot work
+`os/src/ui/shell.rs`. Give it a `group`, so the launcher files it under the right submenu; add a group in `apps/mod.rs` when none fits. Set `needs_network: true` if the app cannot work
 without Wi-Fi: the build then leaves it out of plain-Pico images, and the
 menu hides it when there is no radio. The photo frame app is the
 reference example.

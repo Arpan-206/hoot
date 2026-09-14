@@ -77,6 +77,20 @@ pub async fn fetch(
             sock.write_all(&reqbuf[..n]).await.map_err(|_| FetchError::Connect)?;
             sock.write_all(&lines[..len]).await.map_err(|_| FetchError::Connect)?;
         }
+        Body::Form(form) => {
+            let body = form.as_str().as_bytes();
+            let n = http::write_post(
+                &mut reqbuf,
+                host.as_str(),
+                u.path,
+                "application/x-www-form-urlencoded",
+                body.len(),
+                req.headers.as_str(),
+            )
+            .ok_or(FetchError::BadUrl)?;
+            sock.write_all(&reqbuf[..n]).await.map_err(|_| FetchError::Connect)?;
+            sock.write_all(body).await.map_err(|_| FetchError::Connect)?;
+        }
     }
 
     // Read until the blank line that ends the head.
@@ -102,6 +116,7 @@ pub async fn fetch(
         last_modified: FixedStr::truncated(head.last_modified.unwrap_or("")),
         crc32: 0,
         command: FixedStr::truncated(head.command.unwrap_or("")),
+        unread: head.unread.unwrap_or(0),
     };
     if head.status != 200 {
         sock.close();

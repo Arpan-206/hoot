@@ -12,6 +12,8 @@ pub struct Head<'a> {
     pub chunked: bool,
     /// `X-Sprig-Command`: an instruction from the photo server, if any.
     pub command: Option<&'a str>,
+    /// `X-Sprig-Unread`: unread messages waiting on the server.
+    pub unread: Option<u8>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -74,6 +76,8 @@ pub fn parse_head(head: &[u8]) -> Result<Head<'_>, HeadError> {
             out.chunked = value.eq_ignore_ascii_case("chunked");
         } else if name.eq_ignore_ascii_case("x-sprig-command") {
             out.command = Some(value);
+        } else if name.eq_ignore_ascii_case("x-sprig-unread") {
+            out.unread = value.parse().ok();
         }
     }
     Ok(out)
@@ -239,8 +243,9 @@ mod tests {
 
     #[test]
     fn parses_a_server_command() {
-        let h = parse_head(b"HTTP/1.1 304 Not Modified\r\nX-Sprig-Command: reboot\r\n\r\n").unwrap();
+        let h = parse_head(b"HTTP/1.1 304 Not Modified\r\nX-Sprig-Command: reboot\r\nX-Sprig-Unread: 3\r\n\r\n").unwrap();
         assert_eq!(h.command, Some("reboot"));
+        assert_eq!(h.unread, Some(3));
         let h = parse_head(b"HTTP/1.1 200 OK\r\n\r\n").unwrap();
         assert_eq!(h.command, None);
     }

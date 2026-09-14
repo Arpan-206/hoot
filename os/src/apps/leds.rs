@@ -2,12 +2,12 @@
 
 use sprig_gfx::Framebuffer;
 
-use crate::apps::{App, AppInfo, Ctx, Transition, back_pressed};
+use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};
 use crate::drivers::input::Button;
 use crate::ui::text::{StrBuf, format};
 use crate::ui::theme;
 
-pub const INFO: AppInfo = AppInfo { name: "LEDs & backlight", needs_network: false };
+pub const INFO: AppInfo = AppInfo { name: "LEDs & backlight", group: Group::Developer, needs_network: false };
 
 pub struct Leds;
 

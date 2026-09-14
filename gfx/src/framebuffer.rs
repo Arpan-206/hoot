@@ -137,6 +137,23 @@ impl Framebuffer {
         self.fill_rect(x, y, 1, h, c);
     }
 
+    /// Draw a 1-bit bitmap: `w` by `h` pixels, rows packed MSB first, each
+    /// row `(w + 7) / 8` bytes. Set bits get `color`; clear bits are left
+    /// alone. `flip_x` mirrors the image, for sprites facing the other way.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_bitmap(&mut self, x: i32, y: i32, w: i32, h: i32, rows: &[u8], color: Rgb565, flip_x: bool) {
+        let stride = ((w + 7) / 8) as usize;
+        for row in 0..h {
+            let Some(bytes) = rows.get(row as usize * stride..(row as usize + 1) * stride) else { return };
+            for col in 0..w {
+                if bytes[(col / 8) as usize] & (0x80 >> (col % 8)) != 0 {
+                    let px = if flip_x { x + w - 1 - col } else { x + col };
+                    self.set(px, y + row, color);
+                }
+            }
+        }
+    }
+
     /// Draw one character at integer `scale`. Returns the horizontal advance.
     ///
     /// `bg` paints the whole 6x8 cell first; `None` leaves the background as is.
@@ -253,6 +270,24 @@ mod tests {
         fb.load_raw(&raw);
         assert!(fb.take_dirty());
         assert_eq!(fb.as_bytes()[7], 0x12);
+    }
+
+    #[test]
+    fn bitmaps_draw_set_bits_only_and_can_flip() {
+        let mut fb = fb();
+        fb.clear(Rgb565::BLUE);
+        // 10 wide, 2 rows: first row has the leftmost pixel, second the rightmost.
+        let rows = [0b1000_0000, 0b0000_0000, 0b0000_0000, 0b0100_0000];
+        fb.draw_bitmap(5, 5, 10, 2, &rows, Rgb565::WHITE, false);
+        assert_eq!(fb.get(5, 5), Some(Rgb565::WHITE));
+        assert_eq!(fb.get(6, 5), Some(Rgb565::BLUE), "clear bits leave the background");
+        assert_eq!(fb.get(14, 6), Some(Rgb565::WHITE));
+        fb.clear(Rgb565::BLUE);
+        fb.draw_bitmap(5, 5, 10, 2, &rows, Rgb565::WHITE, true);
+        assert_eq!(fb.get(14, 5), Some(Rgb565::WHITE), "flipped: leftmost becomes rightmost");
+        assert_eq!(fb.get(5, 6), Some(Rgb565::WHITE));
+        // Too few rows: draws what exists, no panic.
+        fb.draw_bitmap(0, 0, 10, 5, &rows, Rgb565::WHITE, false);
     }
 
     #[test]

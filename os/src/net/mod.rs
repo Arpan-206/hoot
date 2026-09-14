@@ -104,6 +104,8 @@ pub enum Body {
     None,
     /// POST the warnings collected since the last post, as text lines.
     RecentWarnings,
+    /// POST a small `application/x-www-form-urlencoded` body.
+    Form(FixedStr<64>),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -133,6 +135,8 @@ pub struct FetchResult {
     pub crc32: u32,
     /// `X-Sprig-Command` from the server, or empty.
     pub command: FixedStr<16>,
+    /// `X-Sprig-Unread` from the server: messages waiting.
+    pub unread: u8,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -186,7 +190,7 @@ pub enum JobState {
     Failed(FetchError),
 }
 
-pub const SMALL_BODY_MAX: usize = 512;
+pub const SMALL_BODY_MAX: usize = 1024;
 
 /// Who a request belongs to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

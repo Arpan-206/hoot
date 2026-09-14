@@ -11,5 +11,6 @@ pub mod dhcp;
 pub mod dns;
 pub mod form;
 pub mod http;
+pub mod messages;
 pub mod record;
 pub mod url;

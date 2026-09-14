@@ -17,7 +17,7 @@
 
 use sprig_gfx::{BYTES, CELL_HEIGHT, Framebuffer, Rgb565};
 
-use crate::apps::{App, AppInfo, Ctx, Transition, back_pressed};
+use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};
 use crate::drivers::dimmer::Dimmer;
 use crate::drivers::input::Button;
 use crate::hw::Pwm;
@@ -26,7 +26,7 @@ use crate::storage::{Config, Storage, StorageError};
 use crate::ui::text::{StrBuf, format};
 use crate::ui::theme;
 
-pub const INFO: AppInfo = AppInfo { name: "Photo frame", needs_network: true };
+pub const INFO: AppInfo = AppInfo { name: "Photo frame", group: Group::Frame, needs_network: true };
 
 /// How often to ask the server for a new photo, and in battery saver mode.
 const POLL_MS: u32 = 15_000;

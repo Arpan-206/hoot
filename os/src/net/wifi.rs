@@ -228,7 +228,7 @@ pub async fn wifi_service(spawner: Spawner, pins: RadioPins, flash: &'static Fla
             });
             match request {
                 Some((lane, req)) => {
-                    info!("http: {} {}", if req.body == super::Body::None { "GET" } else { "POST" }, req.url.as_str());
+                    info!("http: {} {}", if matches!(req.body, super::Body::None) { "GET" } else { "POST" }, req.url.as_str());
                     let outcome = http::fetch(stack, &req, flash, &mut small).await;
                     match &outcome {
                         Ok(r) => info!("http: {} ({} bytes)", r.status, r.len),

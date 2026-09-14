@@ -3,12 +3,12 @@
 use sprig_gfx::{CELL_HEIGHT, Framebuffer, Rgb565};
 
 use crate::VERSION;
-use crate::apps::{App, AppInfo, Ctx, Transition, back_pressed};
+use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};
 use crate::net::NetState;
 use crate::ui::text::{StrBuf, format};
 use crate::ui::theme;
 
-pub const INFO: AppInfo = AppInfo { name: "About", needs_network: false };
+pub const INFO: AppInfo = AppInfo { name: "About", group: Group::System, needs_network: false };
 
 pub struct About;
 

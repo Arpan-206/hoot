@@ -2,14 +2,14 @@
 
 use sprig_gfx::{CELL_HEIGHT, Framebuffer, Rgb565};
 
-use crate::apps::{App, AppInfo, Ctx, Transition, back_pressed};
+use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};
 use crate::drivers::input::Button;
 use crate::drivers::module::Module;
 use crate::net::NetState;
 use crate::ui::text::{StrBuf, format};
 use crate::ui::theme;
 
-pub const INFO: AppInfo = AppInfo { name: "Network", needs_network: true };
+pub const INFO: AppInfo = AppInfo { name: "Network", group: Group::System, needs_network: true };
 
 pub struct NetworkApp;
 

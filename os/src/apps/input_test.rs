@@ -3,7 +3,7 @@
 
 use sprig_gfx::Framebuffer;
 
-use crate::apps::{App, AppInfo, Ctx, Transition};
+use crate::apps::{App, AppInfo, Group, Ctx, Transition};
 use crate::drivers::input::Button;
 use crate::ui::text::{StrBuf, format};
 use crate::ui::theme;
@@ -11,7 +11,7 @@ use crate::ui::theme;
 const KEY: i32 = 18;
 const EXIT_HOLD_MS: u32 = 1000;
 
-pub const INFO: AppInfo = AppInfo { name: "Input test", needs_network: false };
+pub const INFO: AppInfo = AppInfo { name: "Input test", group: Group::Developer, needs_network: false };
 
 pub struct InputTest {
     presses: u32,

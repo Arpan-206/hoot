@@ -1,7 +1,11 @@
 //! The home screen: a two-level menu that launches apps and runs system
 //! actions, and hands the active app the frame.
 //!
-//! Top level: the apps, plus Settings and Developer. Settings holds the
+//! Top level: one entry per app group (Frame, Fun, Tools), About, then
+//! Settings and Developer. Apps never sit on the top level by themselves:
+//! each app names its group in `AppInfo`, and the shell builds the group
+//! submenus from that, so a new app lands in the right place on its own.
+//! A group with nothing usable on this board is hidden. Settings holds the
 //! network, battery saver, cache and reboot actions. Developer holds the
 //! hardware test screens. J goes back, as in the apps.
 
@@ -9,14 +13,19 @@ use sprig_gfx::{CELL_HEIGHT, WIDTH};
 use sprig_proto::record::{POWER_AUTO, POWER_NORMAL, POWER_SAVER};
 
 use crate::apps::about::{self, About};
+use crate::apps::aquarium::{self, Aquarium};
 use crate::apps::display_test::{self, DisplayTest};
+use crate::apps::fireplace::{self, Fireplace};
 use crate::apps::input_test::{self, InputTest};
 use crate::apps::leds::{self, Leds};
+#[cfg(feature = "wifi")]
+use crate::apps::messages::{self, Messages};
 #[cfg(feature = "wifi")]
 use crate::apps::network::{self, NetworkApp};
 #[cfg(feature = "wifi")]
 use crate::apps::photo_frame::{self, PhotoFrame};
-use crate::apps::{App, AppInfo, Ctx, Transition};
+use crate::apps::pomodoro::{self, Pomodoro};
+use crate::apps::{App, AppInfo, Ctx, Group, Transition};
 use crate::drivers::input::Button;
 use crate::drivers::power::PowerStatus;
 use crate::ui::text::{StrBuf, format};
@@ -36,8 +45,13 @@ enum AppId {
     InputTest,
     Leds,
     DisplayTest,
+    Pomodoro,
+    Fireplace,
+    Aquarium,
     #[cfg(feature = "wifi")]
     PhotoFrame,
+    #[cfg(feature = "wifi")]
+    Messages,
     #[cfg(feature = "wifi")]
     Network,
 }
@@ -45,16 +59,17 @@ enum AppId {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Menu {
     Main,
+    /// The apps of one group.
+    Group(Group),
     Settings,
-    Developer,
 }
 
 impl Menu {
     const fn title(self) -> &'static str {
         match self {
             Menu::Main => "Sprig OS",
+            Menu::Group(g) => g.title(),
             Menu::Settings => "Settings",
-            Menu::Developer => "Developer",
         }
     }
 }
@@ -86,20 +101,39 @@ const fn item(name: &'static str, action: Action) -> Entry {
     Entry { name, needs_network: false, action }
 }
 
+const fn group(g: Group) -> Entry {
+    item(g.title(), Action::Open(Menu::Group(g)))
+}
+
+fn usable(entry: &Entry, has_radio: bool) -> bool {
+    !entry.needs_network || has_radio
+}
+
 // Registries. Entries that need the network exist only in `wifi` builds,
 // and are hidden at runtime when there is no radio.
-#[cfg(feature = "wifi")]
-const MAIN: &[Entry] = &[
-    app(&photo_frame::INFO, AppId::PhotoFrame),
-    app(&about::INFO, AppId::About),
-    item("Settings", Action::Open(Menu::Settings)),
-    item("Developer", Action::Open(Menu::Developer)),
+
+/// Every app, in the order it shows inside its group. The group submenus
+/// are filtered out of this list, so an app only needs to be added here.
+const APPS: &[(Group, Entry)] = &[
+    #[cfg(feature = "wifi")]
+    (photo_frame::INFO.group, app(&photo_frame::INFO, AppId::PhotoFrame)),
+    #[cfg(feature = "wifi")]
+    (messages::INFO.group, app(&messages::INFO, AppId::Messages)),
+    (fireplace::INFO.group, app(&fireplace::INFO, AppId::Fireplace)),
+    (aquarium::INFO.group, app(&aquarium::INFO, AppId::Aquarium)),
+    (pomodoro::INFO.group, app(&pomodoro::INFO, AppId::Pomodoro)),
+    (input_test::INFO.group, app(&input_test::INFO, AppId::InputTest)),
+    (leds::INFO.group, app(&leds::INFO, AppId::Leds)),
+    (display_test::INFO.group, app(&display_test::INFO, AppId::DisplayTest)),
 ];
-#[cfg(not(feature = "wifi"))]
+
 const MAIN: &[Entry] = &[
+    group(Group::Frame),
+    group(Group::Fun),
+    group(Group::Tools),
     app(&about::INFO, AppId::About),
     item("Settings", Action::Open(Menu::Settings)),
-    item("Developer", Action::Open(Menu::Developer)),
+    group(Group::Developer),
 ];
 
 #[cfg(feature = "wifi")]
@@ -115,12 +149,6 @@ const SETTINGS: &[Entry] = &[
     item("Battery saver", Action::BatterySaver),
     item("Reboot", Action::Reboot),
     item("Reboot to USB", Action::RebootToUsb),
-];
-
-const DEVELOPER: &[Entry] = &[
-    app(&input_test::INFO, AppId::InputTest),
-    app(&leds::INFO, AppId::Leds),
-    app(&display_test::INFO, AppId::DisplayTest),
 ];
 
 /// A reset that happens on the next frame, after its notice was drawn.
@@ -143,12 +171,19 @@ pub struct Shell {
     running: Option<AppId>,
     pending_reset: Option<PendingReset>,
     notice: Option<(&'static str, u32)>,
+    /// True while the right LED is pulsing for unread messages.
+    cue_on: bool,
     about: About,
     input_test: InputTest,
     leds: Leds,
     display_test: DisplayTest,
+    pomodoro: Pomodoro,
+    fireplace: Fireplace,
+    aquarium: Aquarium,
     #[cfg(feature = "wifi")]
     photo_frame: PhotoFrame,
+    #[cfg(feature = "wifi")]
+    messages: Messages,
     #[cfg(feature = "wifi")]
     network: NetworkApp,
 }
@@ -166,12 +201,18 @@ impl Shell {
             running: None,
             pending_reset: None,
             notice: None,
+            cue_on: false,
             about: About,
             input_test: InputTest::new(),
             leds: Leds,
             display_test: DisplayTest::new(),
+            pomodoro: Pomodoro::new(),
+            fireplace: Fireplace::new(),
+            aquarium: Aquarium::new(),
             #[cfg(feature = "wifi")]
             photo_frame: PhotoFrame::new(),
+            #[cfg(feature = "wifi")]
+            messages: Messages::new(),
             #[cfg(feature = "wifi")]
             network: NetworkApp,
         };
@@ -179,20 +220,39 @@ impl Shell {
         shell
     }
 
-    /// Show `menu`, keeping only entries the board can use.
+    /// Show `menu`, keeping only entries the board can use. Group menus
+    /// are built from `APPS`; an empty group is left off the top menu.
     fn open(&mut self, menu: Menu, selected: usize) {
-        let registry: &[Entry] = match menu {
-            Menu::Main => MAIN,
-            Menu::Settings => SETTINGS,
-            Menu::Developer => DEVELOPER,
+        let has_radio = self.has_radio;
+        let mut len = 0;
+        let mut push = |entry: &Entry| {
+            if len < MENU_MAX {
+                self.entries[len] = *entry;
+                len += 1;
+            }
         };
-        self.len = 0;
-        for entry in registry {
-            if (!entry.needs_network || self.has_radio) && self.len < MENU_MAX {
-                self.entries[self.len] = *entry;
-                self.len += 1;
+        match menu {
+            Menu::Group(g) => {
+                for (_, entry) in APPS.iter().filter(|(gg, e)| *gg == g && usable(e, has_radio)) {
+                    push(entry);
+                }
+            }
+            Menu::Main | Menu::Settings => {
+                let registry = if menu == Menu::Main { MAIN } else { SETTINGS };
+                for entry in registry {
+                    let shown = match entry.action {
+                        Action::Open(Menu::Group(g)) => {
+                            APPS.iter().any(|(gg, e)| *gg == g && usable(e, has_radio))
+                        }
+                        _ => usable(entry, has_radio),
+                    };
+                    if shown {
+                        push(entry);
+                    }
+                }
             }
         }
+        self.len = len;
         self.current = menu;
         self.selected = selected.min(self.len.saturating_sub(1));
         self.first = 0;
@@ -228,8 +288,13 @@ impl Shell {
             AppId::InputTest => &mut self.input_test,
             AppId::Leds => &mut self.leds,
             AppId::DisplayTest => &mut self.display_test,
+            AppId::Pomodoro => &mut self.pomodoro,
+            AppId::Fireplace => &mut self.fireplace,
+            AppId::Aquarium => &mut self.aquarium,
             #[cfg(feature = "wifi")]
             AppId::PhotoFrame => &mut self.photo_frame,
+            #[cfg(feature = "wifi")]
+            AppId::Messages => &mut self.messages,
             #[cfg(feature = "wifi")]
             AppId::Network => &mut self.network,
         }
@@ -268,6 +333,8 @@ impl Shell {
             }
         }
 
+        self.message_cue(ctx);
+
         if let Some(id) = self.running {
             if self.app(id).update(ctx) == Transition::Exit {
                 info!("close app");
@@ -297,6 +364,25 @@ impl Shell {
             Some(PendingReset::Usb) => self.draw_notice(ctx, "USB flash mode"),
             Some(PendingReset::Normal) => self.draw_notice(ctx, "Rebooting..."),
             None => self.draw_menu(ctx),
+        }
+    }
+
+    /// Pulse the right LED softly while messages wait, except inside apps
+    /// that drive the LEDs themselves.
+    fn message_cue(&mut self, ctx: &mut Ctx) {
+        #[cfg(feature = "wifi")]
+        let unread = crate::agent::unread();
+        #[cfg(not(feature = "wifi"))]
+        let unread = 0u8;
+        let owns_leds = matches!(self.running, Some(AppId::Leds) | Some(AppId::Pomodoro) | Some(AppId::InputTest));
+        if unread > 0 && !owns_leds {
+            let t = (ctx.now_ms % 2400) as i32;
+            let level = if t < 1200 { t / 20 } else { (2400 - t) / 20 };
+            ctx.hw.led_right.set(level as u8);
+            self.cue_on = true;
+        } else if self.cue_on {
+            ctx.hw.led_right.set(0);
+            self.cue_on = false;
         }
     }
 
@@ -389,6 +475,18 @@ impl Shell {
             }
             if is_menu {
                 fb.draw_text(WIDTH - 12, y, ">", theme::MUTED, None);
+            }
+            // Unread badge on Messages, and on the group that holds it, so
+            // the count shows from the top menu too.
+            #[cfg(feature = "wifi")]
+            if matches!(entry.action, Action::Launch(AppId::Messages))
+                || matches!(entry.action, Action::Open(Menu::Group(g)) if g == messages::INFO.group)
+            {
+                let n = crate::agent::unread();
+                if n > 0 {
+                    let badge: StrBuf<6> = format(format_args!("{n}"));
+                    fb.draw_text_right(WIDTH - 6, y, badge.as_str(), theme::ACCENT, None);
+                }
             }
             y += ROW_H;
         }

@@ -5,7 +5,7 @@
 //! Every app, built in or (later) loaded as WASM, has the same shape:
 //!
 //! ```ignore
-//! pub const INFO: AppInfo = AppInfo { name: "My app", needs_network: false };
+//! pub const INFO: AppInfo = AppInfo { name: "My app", group: Group::Tools, needs_network: false };
 //!
 //! pub struct MyApp { /* state that survives between frames */ }
 //!
@@ -46,13 +46,18 @@
 //! plain-Pico builds and hidden when there is no radio.
 
 pub mod about;
+pub mod aquarium;
 pub mod display_test;
+pub mod fireplace;
 pub mod input_test;
 pub mod leds;
+#[cfg(feature = "wifi")]
+pub mod messages;
 #[cfg(feature = "wifi")]
 pub mod network;
 #[cfg(feature = "wifi")]
 pub mod photo_frame;
+pub mod pomodoro;
 
 use sprig_gfx::Framebuffer;
 
@@ -65,9 +70,40 @@ use crate::storage::Storage;
 /// Static facts about an app, used by the launcher.
 pub struct AppInfo {
     pub name: &'static str,
+    /// Where the launcher files the app. Apps never sit on the top menu by
+    /// themselves: the shell folds each group into its own submenu.
+    pub group: Group,
     /// Apps that need the network are only built with the `wifi` feature,
     /// and the launcher hides them when the board has no usable radio.
     pub needs_network: bool,
+}
+
+/// The launcher groups. Pick one for every app; add a group here when
+/// none fits, and the shell gets the submenu for free.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Group {
+    /// The photo frame and what comes with it.
+    Frame,
+    /// Things to watch.
+    Fun,
+    /// Things to use.
+    Tools,
+    /// About and Network: the shell places these by hand.
+    System,
+    /// Hardware test screens.
+    Developer,
+}
+
+impl Group {
+    pub const fn title(self) -> &'static str {
+        match self {
+            Group::Frame => "Frame",
+            Group::Fun => "Fun",
+            Group::Tools => "Tools",
+            Group::System => "System",
+            Group::Developer => "Developer",
+        }
+    }
 }
 
 /// Everything an app can see during one frame.
