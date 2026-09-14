@@ -4,7 +4,7 @@ members = ["os", "gfx", "proto", "boot"]
 default-members = ["os"]
 
 [workspace.package]
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 license = "MIT"
 
@@ -12,7 +12,9 @@ license = "MIT"
 codegen-units = 1
 debug = 2          # keep symbols in the ELF; they never reach the flash image
 lto = "fat"
-opt-level = 3
+# Size over speed: the same program in half the flash. The device mostly
+# waits on DMA and the network, so it has the cycles to spare.
+opt-level = "s"
 overflow-checks = false
 
 [profile.dev]
