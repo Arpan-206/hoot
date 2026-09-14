@@ -4,7 +4,7 @@
 //! with the newest sequence number and a valid CRC wins. No heap, no serde.
 
 use crate::crc32::crc32;
-use crate::pet::Pet;
+use crate::pet::{GOAL_NAME_MAX, Pet};
 
 /// A string with a fixed capacity, stored inline. Never allocates.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -93,6 +93,11 @@ pub struct Config {
     pub alarm_tone: u8,
     /// Hoot's care state.
     pub pet: Pet,
+    /// Names for the five customisable goals, set from the web page. Empty
+    /// means the built-in name.
+    pub goal_names: [FixedStr<GOAL_NAME_MAX>; 5],
+    /// The server's stamp for those names, so a change is noticed.
+    pub goals_stamp: u32,
 }
 
 pub const POWER_AUTO: u8 = 0;
@@ -109,10 +114,10 @@ const VERSION: u16 = 1;
 /// Encoded size in bytes: header, payload, CRC. Fields added later sit at
 /// the end of the payload; older, shorter records still decode and the
 /// missing fields take their defaults. Never reorder or remove a field.
-pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 33 + 4;
+pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 33 + 5 * (GOAL_NAME_MAX + 1) + 4 + 4;
 /// Bytes after `poll_secs`, added by later firmware one at a time.
 #[cfg(test)]
-const TRAILING_LEN: usize = 1 + 1 + 2 + 1 + 1 + 33;
+const TRAILING_LEN: usize = 1 + 1 + 2 + 1 + 1 + 33 + 5 * (GOAL_NAME_MAX + 1) + 4;
 const HEADER_LEN: usize = 12;
 const CRC_LEN: usize = 4;
 
@@ -224,6 +229,10 @@ pub fn encode(cfg: &Config, seq: u32, out: &mut [u8]) -> Option<usize> {
     c.put(&[cfg.pet.flags, cfg.pet.outfit])?;
     c.put(&cfg.pet.born.to_le_bytes())?;
     c.put(&cfg.pet.seen.to_le_bytes())?;
+    for name in &cfg.goal_names {
+        c.put_str(name)?;
+    }
+    c.put(&cfg.goals_stamp.to_le_bytes())?;
     let body_len = c.pos;
     let crc = crc32(&c.buf[..body_len]);
     c.put(&crc.to_le_bytes())?;
@@ -264,6 +273,14 @@ pub fn decode(buf: &[u8]) -> Option<(Config, u32)> {
         alarm_on: r.u8().unwrap_or(0),
         alarm_tone: r.u8().unwrap_or(0),
         pet: read_pet(&mut r).unwrap_or_default(),
+        goal_names: [
+            r.str().unwrap_or_default(),
+            r.str().unwrap_or_default(),
+            r.str().unwrap_or_default(),
+            r.str().unwrap_or_default(),
+            r.str().unwrap_or_default(),
+        ],
+        goals_stamp: r.u32().unwrap_or(0),
     };
     Some((cfg, seq))
 }
@@ -300,6 +317,8 @@ mod tests {
             born: 1_789_000_000,
             seen: 1_789_100_000,
         };
+        c.goal_names[1].set("Walk the dog");
+        c.goals_stamp = 77;
         c
     }
 
@@ -330,6 +349,8 @@ mod tests {
         assert_eq!(cfg.alarm_min, ALARM_DEFAULT_MIN);
         assert_eq!((cfg.alarm_on, cfg.alarm_tone), (0, 0));
         assert_eq!(cfg.pet, Pet::new());
+        assert!(cfg.goal_names.iter().all(|n| n.is_empty()));
+        assert_eq!(cfg.goals_stamp, 0);
     }
 
     #[test]

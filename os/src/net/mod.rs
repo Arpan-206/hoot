@@ -95,6 +95,8 @@ pub enum Sink {
     Small,
     /// Stream a firmware image into the update partition and mark it.
     Firmware,
+    /// One full screen of RGB565 into RAM. Read with `live_frame`.
+    Frame,
 }
 
 /// What to send with the request.
@@ -141,6 +143,10 @@ pub struct FetchResult {
     pub time: Option<u32>,
     /// `X-Sprig-Tz`: the frame's zone offset in minutes. Zero if not sent.
     pub tz_min: i16,
+    /// `X-Sprig-Live`: motion frames the server holds for the photo.
+    pub live: u8,
+    /// `X-Sprig-Goals`: stamp of the frame's goal names on the server.
+    pub goals_stamp: u32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -195,6 +201,11 @@ pub enum JobState {
 }
 
 pub const SMALL_BODY_MAX: usize = 1024;
+
+/// Where `Sink::Frame` lands: one screen of pixels, filled by the network
+/// task and read by the app when the job is done.
+pub static LIVE_FRAME: Mutex<CriticalSectionRawMutex, RefCell<[u8; hoot_gfx::BYTES]>> =
+    Mutex::new(RefCell::new([0; hoot_gfx::BYTES]));
 
 /// Who a request belongs to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -370,5 +381,10 @@ impl NetHandle {
     /// Read the body of the last `Sink::Small` fetch on `lane`.
     pub fn small_body_on<R>(&self, lane: Lane, f: impl FnOnce(&[u8]) -> R) -> R {
         with(|s| f(&s.small_body[lane as usize][..s.small_len[lane as usize]]))
+    }
+
+    /// The last frame fetched with `Sink::Frame`.
+    pub fn live_frame<R>(&self, f: impl FnOnce(&[u8; hoot_gfx::BYTES]) -> R) -> R {
+        LIVE_FRAME.lock(|cell| f(&cell.borrow()))
     }
 }

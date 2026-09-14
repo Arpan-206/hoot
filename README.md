@@ -27,6 +27,8 @@ a 160x128 colour display, eight buttons, two white LEDs and a speaker.
 | Home menu with grouped apps (Frame, Fun, Tools) | Done |
 | Speaker: I2S tones from PIO1 and DMA, volume setting | Done, verified on hardware |
 | Clock from the server heartbeat, daily alarm | Done, verified on hardware |
+| Live photos: motion frames streamed from the server | Done, untested on hardware |
+| Goals renamed from the web page, kept offline | Done, untested on hardware |
 | Hoot the owl: hatching, check-in, goals, breathing, adventures, outfits, the week, hugs | Done, untested on hardware |
 | Slideshow of the last uploads, cached in flash | Done, untested on hardware |
 | Reboot to USB flash mode from the menu | Done |
@@ -299,8 +301,12 @@ you have checked in, a note that a message from home is waiting, praise
 after three goals, and otherwise one gentle line a day from a list of
 twenty-one.
 
-Family can send a hug from the web page. It arrives as the server command
-`hug`, gives 10 energy, and Hoot says so. The heartbeat carries Hoot's
+Family can send a hug from the web page, with their name: it arrives as
+the server command `hug:Mum`, gives 10 energy, and Hoot says who it was
+from. The five goals besides Check in and Breathe can be renamed per frame
+on the web page, in a "Hoot's goals" card. The heartbeat carries a stamp
+for them; when it changes the device fetches the names and stores them in
+the config record, so they work offline too. The heartbeat carries Hoot's
 stage, energy and goals for the day in `X-Sprig-Pet`. The check-in never
 leaves the device. Hoot's state lives in the config record, saved after
 each change and every ten minutes.
@@ -330,6 +336,20 @@ picture. The Slideshow app lists them, fetches the newest six it does not yet ha
 slots 2 to 7, and cycles through them newest first. Photos survive
 reboots, so the show runs from flash when the network is down. The list is
 refreshed every five minutes.
+
+## Live photos
+
+A Live Photo is a still and a short clip. Send both from the web page: the
+picture as usual, and the clip with "add the motion clip". A Pixel motion
+photo, which hides its clip inside the JPEG, is found on its own. The
+server pulls ten frames out of the clip with ffmpeg, framed like the
+still, and answers the frame poll with `X-Sprig-Live: 10`.
+
+While online, the photo frame plays the frames every 45 seconds: each one
+is fetched straight into a spare screen buffer in RAM and shown, then the
+still comes back from flash. The pace is the network's, a few frames a
+second. Offline, or in battery saver, the still is all there is. A plain
+upload without a clip clears the motion.
 
 ## Sounds
 

@@ -119,6 +119,8 @@ pub async fn fetch(
         unread: head.unread.unwrap_or(0),
         time: head.time,
         tz_min: head.tz_min.unwrap_or(0),
+        live: head.live.unwrap_or(0),
+        goals_stamp: head.goals_stamp.unwrap_or(0),
     };
     if head.status != 200 {
         sock.close();
@@ -187,6 +189,28 @@ pub async fn fetch(
                 return Err(FetchError::Protocol);
             }
             result.len = w.finish().map_err(|_| FetchError::Update)? as u32;
+        }
+        Sink::Frame => {
+            const FRAME: usize = hoot_gfx::BYTES;
+            if content_length.is_some_and(|l| l != FRAME) {
+                return Err(FetchError::TooLarge);
+            }
+            let leftover = (filled - head_end).min(FRAME);
+            super::LIVE_FRAME.lock(|c| c.borrow_mut()[..leftover].copy_from_slice(&buf[head_end..head_end + leftover]));
+            total = leftover;
+            while total < FRAME {
+                let n = sock.read(&mut buf).await.map_err(|_| FetchError::Protocol)?;
+                if n == 0 {
+                    break;
+                }
+                let n = n.min(FRAME - total);
+                super::LIVE_FRAME.lock(|c| c.borrow_mut()[total..total + n].copy_from_slice(&buf[..n]));
+                total += n;
+            }
+            if total != FRAME {
+                return Err(FetchError::Protocol);
+            }
+            result.len = total as u32;
         }
         Sink::Small => {
             let leftover = (filled - head_end).min(SMALL_BODY_MAX);

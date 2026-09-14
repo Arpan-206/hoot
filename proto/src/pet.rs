@@ -15,6 +15,11 @@ pub const GOALS: [&str; 7] = [
     "Breathe with Hoot",
     "Wind down",
 ];
+/// Goals whose names the web page may set, in the order the page lists
+/// them. Check in and Breathe with Hoot keep their names.
+pub const CUSTOM_GOALS: [usize; 5] = [1, 2, 3, 4, 6];
+/// Longest goal name that fits next to its box.
+pub const GOAL_NAME_MAX: usize = 17;
 pub const GOAL_CHECKIN: usize = 0;
 pub const GOAL_FOCUS: usize = 4;
 pub const GOAL_BREATHE: usize = 5;

@@ -17,6 +17,7 @@ use crate::apps::photo_frame;
 use crate::clock::{self, Source};
 use crate::net::{Body, FetchRequest, FetchResult, FixedStr, JobState, Lane, NetHandle, Sink};
 use crate::storage::{Config, Storage};
+use hoot_proto::pet::GOAL_NAME_MAX;
 use hoot_proto::record::{POWER_AUTO, POWER_NORMAL, POWER_SAVER};
 use crate::ui::text::{StrBuf, format};
 
@@ -47,6 +48,7 @@ enum Job {
     Warnings,
     Version,
     Firmware,
+    Goals,
 }
 
 pub struct Agent {
@@ -57,6 +59,9 @@ pub struct Agent {
     next_ota_ms: u32,
     next_log_ms: u32,
     check_update: bool,
+    /// The server's goal names changed: fetch them.
+    fetch_goals: bool,
+    goals_stamp: u32,
     fails: u8,
 }
 
@@ -84,6 +89,8 @@ impl Agent {
             next_ota_ms: 0,
             next_log_ms: 0,
             check_update: false,
+            fetch_goals: false,
+            goals_stamp: 0,
             fails: 0,
         }
     }
@@ -112,6 +119,7 @@ impl Agent {
                         Job::Heartbeat => self.finish_heartbeat(net, store, now, r),
                         Job::Version => self.finish_version(net, store, r),
                         Job::Firmware => self.finish_firmware(r),
+                        Job::Goals => self.finish_goals(net, store, r),
                         Job::Warnings | Job::None => {}
                     }
                 }
@@ -135,6 +143,8 @@ impl Agent {
             self.start_version_check(net, store, now);
         } else if due(now, self.next_poll_ms) {
             self.start_heartbeat(net, store, now, app, saver);
+        } else if self.fetch_goals {
+            self.start_goals(net, store);
         } else if crate::logging::unsent() > 0 && due(now, self.next_log_ms) {
             self.start_warnings(net, store, now);
         }
@@ -179,6 +189,34 @@ impl Agent {
         self.start(net, Job::Warnings, request);
     }
 
+    fn start_goals(&mut self, net: &mut NetHandle, store: &Storage) {
+        let request = FetchRequest::get(url(store.config(), "/goals/", true), Sink::Small);
+        self.fetch_goals = false;
+        self.start(net, Job::Goals, request);
+    }
+
+    /// Five lines from the server become the five customisable goal names.
+    /// An empty line keeps the built-in name.
+    fn finish_goals(&mut self, net: &mut NetHandle, store: &mut Storage, r: FetchResult) {
+        if r.status != 200 {
+            warn!("goals: HTTP {}", r.status);
+            return;
+        }
+        let mut names: [FixedStr<GOAL_NAME_MAX>; 5] = Default::default();
+        net.small_body_on(Lane::System, |body| {
+            let text = core::str::from_utf8(body).unwrap_or("");
+            for (slot, line) in text.lines().take(5).enumerate() {
+                names[slot] = FixedStr::truncated(line.trim_end_matches('\r').trim());
+            }
+        });
+        let stamp = self.goals_stamp;
+        let _ = store.update_config(|c| {
+            c.goal_names = names;
+            c.goals_stamp = stamp;
+        });
+        info!("goals: updated from the server (stamp {})", stamp);
+    }
+
     fn start_version_check(&mut self, net: &mut NetHandle, store: &Storage, now: u32) {
         let request = FetchRequest::get(url(store.config(), "/firmware/version.txt", false), Sink::Small);
         self.check_update = false;
@@ -200,6 +238,10 @@ impl Agent {
         } else {
             self.fails = 0;
             set_unread(r.unread);
+            if r.goals_stamp != 0 && r.goals_stamp != store.config().goals_stamp {
+                self.goals_stamp = r.goals_stamp;
+                self.fetch_goals = true;
+            }
             if let Some(utc) = r.time {
                 let was_set = clock::source() != Source::Unset;
                 clock::set(utc.wrapping_add_signed(r.tz_min as i32 * 60), now, Source::Server);
@@ -216,6 +258,10 @@ impl Agent {
     /// One instruction from the server, delivered with a heartbeat.
     fn run_command(&mut self, net: &mut NetHandle, store: &mut Storage, now: u32, command: &str) {
         info!("command from server: {command}");
+        if let Some(from) = command.strip_prefix("hug") {
+            crate::apps::hoot::hug_from(from.trim_start_matches(':').trim());
+            return;
+        }
         match command {
             "reboot" => cortex_m::peripheral::SCB::sys_reset(),
             "clear-cache" => {
@@ -226,7 +272,6 @@ impl Agent {
                 let _ = store.update_config(|c| c.frame_last_modified.clear());
             }
             "portal" => net.request_portal(),
-            "hug" => crate::apps::hoot::hug(),
             "update" => {
                 self.check_update = true;
                 self.next_ota_ms = now;

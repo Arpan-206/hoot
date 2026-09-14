@@ -13,8 +13,15 @@
 //! the config record after each change and every ten minutes.
 
 use hoot_gfx::{Framebuffer, WIDTH};
-use hoot_proto::pet::{GOAL_BREATHE, GOAL_CHECKIN, GOAL_FOCUS, GOALS, Outfit, Pet, Stage, greeting, line_of_day, mood_word, reply};
+use hoot_proto::pet::{CUSTOM_GOALS, GOAL_BREATHE, GOAL_CHECKIN, GOAL_FOCUS, GOALS, Outfit, Pet, Stage, greeting, line_of_day, mood_word, reply};
+use hoot_proto::record::FixedStr;
+
+use crate::storage::Config;
 use hoot_proto::time::{WEEKDAYS, days_from_secs};
+use core::cell::RefCell;
+
+use embassy_sync::blocking_mutex::Mutex;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use portable_atomic::{AtomicBool, AtomicU8, Ordering};
 
 use crate::apps::{App, AppInfo, Ctx, Group, Transition, back_pressed};
@@ -55,6 +62,8 @@ const STAGES: [Stage; 5] = [Stage::Hatchling, Stage::Owlet, Stage::Fledgling, St
 // Signals in and out, so the agent, the Pomodoro and the menu can reach
 // Hoot without holding it.
 static HUG: AtomicBool = AtomicBool::new(false);
+/// Who sent the hug, if the page said.
+static HUG_FROM: Mutex<CriticalSectionRawMutex, RefCell<FixedStr<12>>> = Mutex::new(RefCell::new(FixedStr::new()));
 static FOCUS: AtomicBool = AtomicBool::new(false);
 static STAGE: AtomicU8 = AtomicU8::new(0);
 static ENERGY: AtomicU8 = AtomicU8::new(0);
@@ -62,10 +71,19 @@ static GOALS_TODAY: AtomicU8 = AtomicU8::new(0);
 static CHECKIN_DUE: AtomicBool = AtomicBool::new(false);
 static ASLEEP: AtomicBool = AtomicBool::new(false);
 
-/// Someone at home sent good wishes (server command "hug").
+/// Someone at home sent good wishes (server command "hug" or "hug:Name").
 #[cfg_attr(not(feature = "wifi"), allow(dead_code))]
-pub fn hug() {
+pub fn hug_from(name: &str) {
+    HUG_FROM.lock(|c| *c.borrow_mut() = FixedStr::truncated(name));
     HUG.store(true, Ordering::Relaxed);
+}
+
+/// The goal's name: the one set on the web page, or the built-in.
+pub fn goal_name(cfg: &Config, goal: usize) -> &str {
+    match CUSTOM_GOALS.iter().position(|&g| g == goal) {
+        Some(slot) if !cfg.goal_names[slot].is_empty() => cfg.goal_names[slot].as_str(),
+        _ => GOALS[goal],
+    }
 }
 
 /// A focus session finished (from the Pomodoro).
@@ -252,10 +270,13 @@ impl HootApp {
             self.changed();
         }
         if HUG.swap(false, Ordering::Relaxed) {
-            info!("hoot: a hug from home");
+            let from: FixedStr<12> = HUG_FROM.lock(|c| *c.borrow());
+            info!("hoot: a hug from {}", if from.is_empty() { "home" } else { from.as_str() });
             self.pet.hug();
             self.wake(now);
-            self.say("A hug from home <3", now);
+            let text: StrBuf<26> =
+                format(format_args!("A hug from {} <3", if from.is_empty() { "home" } else { from.as_str() }));
+            self.say(text.as_str(), now);
             audio::play(Sound::Done);
             self.hop(now);
             self.changed();
@@ -577,7 +598,7 @@ impl App for HootApp {
             let say = self.say.as_ref().map(|s| &s.0);
             match self.screen {
                 Screen::Intro => draw_intro(ctx.fb, self.intro_step, look, hop),
-                Screen::Home => draw_home(ctx.fb, &self.pet, self.sel, look, hop, self.asleep, say, secs, phase, now),
+                Screen::Home => draw_home(ctx.fb, ctx.store.config(), &self.pet, self.sel, look, hop, self.asleep, say, secs, phase, now),
                 Screen::CheckIn => draw_check_in(ctx.fb, &self.pet, self.face, look),
                 Screen::Breathe => draw_breathe(ctx.fb, &self.pet, now.wrapping_sub(self.started_ms), look),
                 Screen::Adventure => draw_adventure(ctx.fb, &self.pet, now.wrapping_sub(self.started_ms), self.grew, look),
@@ -640,6 +661,7 @@ fn draw_intro(fb: &mut Framebuffer, step: u8, look: Look, hop: i32) {
 #[allow(clippy::too_many_arguments)]
 fn draw_home(
     fb: &mut Framebuffer,
+    cfg: &Config,
     pet: &Pet,
     sel: usize,
     look: Look,
@@ -656,7 +678,8 @@ fn draw_home(
     let energy: StrBuf<8> = format(format_args!("{}%", pet.energy));
     fb.draw_text_centered_in(6, 42, 73, energy.as_str(), theme::MUTED);
 
-    for (i, name) in GOALS.iter().enumerate() {
+    for i in 0..GOALS.len() {
+        let name = goal_name(cfg, i);
         let y = 22 + i as i32 * 10;
         if i == sel {
             fb.fill_rect(46, y - 2, WIDTH - 48, 10, theme::BAR);

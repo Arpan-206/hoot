@@ -18,6 +18,10 @@ pub struct Head<'a> {
     pub time: Option<u32>,
     /// `X-Sprig-Tz`: the frame's zone offset from UTC, in minutes.
     pub tz_min: Option<i16>,
+    /// `X-Sprig-Live`: motion frames the server holds for the current photo.
+    pub live: Option<u8>,
+    /// `X-Sprig-Goals`: a stamp that changes when the frame's goals change.
+    pub goals_stamp: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -86,6 +90,10 @@ pub fn parse_head(head: &[u8]) -> Result<Head<'_>, HeadError> {
             out.time = value.parse().ok();
         } else if name.eq_ignore_ascii_case("x-sprig-tz") {
             out.tz_min = value.parse().ok();
+        } else if name.eq_ignore_ascii_case("x-sprig-live") {
+            out.live = value.parse().ok();
+        } else if name.eq_ignore_ascii_case("x-sprig-goals") {
+            out.goals_stamp = value.parse().ok();
         }
     }
     Ok(out)
