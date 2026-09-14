@@ -25,6 +25,9 @@ use crate::apps::network::{self, NetworkApp};
 #[cfg(feature = "wifi")]
 use crate::apps::photo_frame::{self, PhotoFrame};
 use crate::apps::pomodoro::{self, Pomodoro};
+use crate::apps::speaker_test::{self, SpeakerTest};
+use crate::apps::stopwatch::{self, Stopwatch};
+use crate::apps::volume::{self, Volume};
 use crate::apps::{App, AppInfo, Ctx, Group, Transition};
 use crate::drivers::input::Button;
 use crate::drivers::power::PowerStatus;
@@ -42,10 +45,13 @@ const NOTICE_MS: u32 = 1_200;
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum AppId {
     About,
+    Volume,
     InputTest,
     Leds,
     DisplayTest,
+    SpeakerTest,
     Pomodoro,
+    Stopwatch,
     Fireplace,
     Aquarium,
     #[cfg(feature = "wifi")]
@@ -122,9 +128,11 @@ const APPS: &[(Group, Entry)] = &[
     (fireplace::INFO.group, app(&fireplace::INFO, AppId::Fireplace)),
     (aquarium::INFO.group, app(&aquarium::INFO, AppId::Aquarium)),
     (pomodoro::INFO.group, app(&pomodoro::INFO, AppId::Pomodoro)),
+    (stopwatch::INFO.group, app(&stopwatch::INFO, AppId::Stopwatch)),
     (input_test::INFO.group, app(&input_test::INFO, AppId::InputTest)),
     (leds::INFO.group, app(&leds::INFO, AppId::Leds)),
     (display_test::INFO.group, app(&display_test::INFO, AppId::DisplayTest)),
+    (speaker_test::INFO.group, app(&speaker_test::INFO, AppId::SpeakerTest)),
 ];
 
 const MAIN: &[Entry] = &[
@@ -140,6 +148,7 @@ const MAIN: &[Entry] = &[
 const SETTINGS: &[Entry] = &[
     app(&network::INFO, AppId::Network),
     item("Battery saver", Action::BatterySaver),
+    app(&volume::INFO, AppId::Volume),
     Entry { name: "Clear photo cache", needs_network: true, action: Action::ClearPhotoCache },
     item("Reboot", Action::Reboot),
     item("Reboot to USB", Action::RebootToUsb),
@@ -147,6 +156,7 @@ const SETTINGS: &[Entry] = &[
 #[cfg(not(feature = "wifi"))]
 const SETTINGS: &[Entry] = &[
     item("Battery saver", Action::BatterySaver),
+    app(&volume::INFO, AppId::Volume),
     item("Reboot", Action::Reboot),
     item("Reboot to USB", Action::RebootToUsb),
 ];
@@ -174,10 +184,13 @@ pub struct Shell {
     /// True while the right LED is pulsing for unread messages.
     cue_on: bool,
     about: About,
+    volume: Volume,
     input_test: InputTest,
     leds: Leds,
     display_test: DisplayTest,
+    speaker_test: SpeakerTest,
     pomodoro: Pomodoro,
+    stopwatch: Stopwatch,
     fireplace: Fireplace,
     aquarium: Aquarium,
     #[cfg(feature = "wifi")]
@@ -203,10 +216,13 @@ impl Shell {
             notice: None,
             cue_on: false,
             about: About,
+            volume: Volume::new(),
             input_test: InputTest::new(),
             leds: Leds,
             display_test: DisplayTest::new(),
+            speaker_test: SpeakerTest::new(),
             pomodoro: Pomodoro::new(),
+            stopwatch: Stopwatch::new(),
             fireplace: Fireplace::new(),
             aquarium: Aquarium::new(),
             #[cfg(feature = "wifi")]
@@ -285,10 +301,13 @@ impl Shell {
     fn app(&mut self, id: AppId) -> &mut dyn App {
         match id {
             AppId::About => &mut self.about,
+            AppId::Volume => &mut self.volume,
             AppId::InputTest => &mut self.input_test,
             AppId::Leds => &mut self.leds,
             AppId::DisplayTest => &mut self.display_test,
+            AppId::SpeakerTest => &mut self.speaker_test,
             AppId::Pomodoro => &mut self.pomodoro,
+            AppId::Stopwatch => &mut self.stopwatch,
             AppId::Fireplace => &mut self.fireplace,
             AppId::Aquarium => &mut self.aquarium,
             #[cfg(feature = "wifi")]
@@ -334,6 +353,15 @@ impl Shell {
         }
 
         self.message_cue(ctx);
+
+        // Timers keep time off screen.
+        for (_, entry) in APPS {
+            if let Action::Launch(id) = entry.action
+                && self.running != Some(id)
+            {
+                self.app(id).background(ctx.now_ms);
+            }
+        }
 
         if let Some(id) = self.running {
             if self.app(id).update(ctx) == Transition::Exit {

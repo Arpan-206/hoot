@@ -17,7 +17,8 @@ a 160x128 colour display, eight buttons, two white LEDs and a speaker.
 | Buttons with debounce and key repeat | Done, verified on hardware |
 | Backlight and LED dimming (PWM) | Done |
 | USB and battery voltage readout | Done |
-| Home menu with four built-in apps | Done |
+| Home menu with grouped apps (Frame, Fun, Tools) | Done |
+| Speaker: I2S tones from PIO1 and DMA, volume setting | Done, untested on hardware |
 | Reboot to USB flash mode from the menu | Done |
 | Pico vs Pico W detection at boot | Done, verified on hardware |
 | Flash storage: config record and 64 KiB blob slots | Done, untested on hardware |
@@ -127,9 +128,9 @@ submenus from that. A group with nothing usable on the board is hidden.
 | Top | Frame, Fun, Tools, About, Settings, Developer |
 | Frame | Photo frame, Messages |
 | Fun | Fireplace, Aquarium |
-| Tools | Pomodoro |
-| Settings | Network, Battery saver, Clear photo cache, Reboot, Reboot to USB |
-| Developer | Input test, LEDs & backlight, Display test |
+| Tools | Pomodoro, Stopwatch |
+| Settings | Network, Battery saver, Volume, Clear photo cache, Reboot, Reboot to USB |
+| Developer | Input test, LEDs & backlight, Display test, Speaker test |
 
 Frame and its apps exist only in Wi-Fi builds. The unread count for
 Messages also shows next to Frame on the top menu.
@@ -143,14 +144,17 @@ Messages also shows next to Frame on the top menu.
 | Input test | Hold J for 1 s | Back to the menu |
 | LEDs app | W/S, I/K, A/D | Left LED, right LED, backlight |
 | Display test | Any key | Next pattern |
+| Speaker test | L, K | Full-scale three-tone sweep, chime at the set level |
 | Photo frame | Hold L for 2 s | Forget the cached photo time and fetch again |
 | Messages | W/S, L, K | Move, mark the selected message seen, refresh |
 | Pomodoro | L, K | Start or pause, stop. W/S and A/D set the lengths while ready |
+| Stopwatch | L, K | Start or stop. Lap while running, reset while stopped |
 | Fireplace | W/S | More or less fuel |
 | Network (Pico W only) | L or D | Connect to Wi-Fi |
 | Network (Pico W only) | K | Open the setup hotspot |
 | Settings: Clear photo cache | L | Erase both photo slots and the stored timestamp |
 | Settings: Battery saver | L | Cycle auto, on, off |
+| Settings: Volume | A/D or W/S, L | Set the level from 0 to 10, play the chime |
 | Settings: Reboot | L | Normal reset |
 | Settings: Reboot to USB | L | Reset into the USB flash mode |
 
@@ -228,6 +232,18 @@ What saver does:
 The radio already sleeps between packets in every mode, and the display
 is only written when something changed, so the rest of the system idles
 by itself.
+
+## Sounds
+
+The Sprig has a small speaker on a MAX98357A amplifier. The OS drives it
+over I2S from PIO1 and one DMA channel, at 24 kHz and 16 bits. Apps ask
+for a named sound and carry on: a tick for a key press, a rising chime
+when a Pomodoro work session ends, a falling one when the break ends.
+Settings has a Volume screen: A/D move the level from 0 to 10 with a
+tick at each step, and L plays the chime. The level is stored in the
+config record. Timers fire
+their chime from the menu too, through the `background` hook that runs
+every frame for every app that is not on screen.
 
 ## Messages
 
@@ -391,4 +407,4 @@ Flash its UF2 the same way as above.
 
 1. Resume the last app after a power cut.
 2. Seen button and a message cue in the photo frame.
-3. I2S audio.
+3. More sounds: an alarm app, a metronome, key clicks in the menu.

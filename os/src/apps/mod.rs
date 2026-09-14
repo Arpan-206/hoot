@@ -44,6 +44,10 @@
 //! To register an app, add it to the registry in `ui::shell`. Set
 //! `needs_network` if it cannot work without Wi-Fi: it is then left out of
 //! plain-Pico builds and hidden when there is no radio.
+//!
+//! Sounds: call `crate::audio::play(Sound::Tick)` and carry on. The OS
+//! owns the speaker and the volume setting. An app that must finish
+//! something while another screen is up implements `background`.
 
 pub mod about;
 pub mod aquarium;
@@ -58,6 +62,9 @@ pub mod network;
 #[cfg(feature = "wifi")]
 pub mod photo_frame;
 pub mod pomodoro;
+pub mod speaker_test;
+pub mod stopwatch;
+pub mod volume;
 
 use sprig_gfx::Framebuffer;
 
@@ -141,6 +148,11 @@ pub trait App {
 
     /// Called once when the app exits.
     fn on_exit(&mut self, _ctx: &mut Ctx) {}
+
+    /// Called every frame for every app that is not on screen. Timers use
+    /// it to finish and sound their chime while another screen is up. Keep
+    /// it cheap: no drawing, no hardware.
+    fn background(&mut self, _now_ms: u32) {}
 
     /// Called once per frame. Draw into `ctx.fb`, or draw nothing to keep
     /// the previous frame on screen.

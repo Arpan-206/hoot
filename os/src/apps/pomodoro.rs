@@ -1,13 +1,16 @@
 //! Pomodoro: work for 25 minutes, rest for 5, repeat.
 //!
 //! The end time is stored as an instant, so the clock keeps running while
-//! another screen is up and catches up when you come back. LEDs show the
-//! phase: left glows during work, right during a break. At a change both
-//! blink for a few seconds.
+//! another screen is up, and `background` makes the change from there too,
+//! so the chime sounds even from the menu. LEDs show the phase: left glows
+//! during work, right during a break. At a change both blink for a few
+//! seconds. The speaker plays a rising chime when a work session is done
+//! and a falling one when the break is over.
 
 use sprig_gfx::{CELL_HEIGHT, Framebuffer, WIDTH};
 
-use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};
+use crate::apps::{App, AppInfo, Ctx, Group, Transition, back_pressed};
+use crate::audio::{self, Sound};
 use crate::drivers::input::Button;
 use crate::ui::text::{StrBuf, format};
 use crate::ui::theme;
@@ -79,6 +82,7 @@ impl Pomodoro {
         };
         self.start(next, now);
         self.alarm_until_ms = now.wrapping_add(ALARM_MS);
+        audio::play(if next == Phase::Break { Sound::Done } else { Sound::Rest });
     }
 }
 
@@ -108,6 +112,7 @@ impl App for Pomodoro {
                 }
                 (_, None) => self.paused_ms = Some(self.remaining_ms(now)),
             }
+            audio::play(Sound::Tick);
         }
         if input.just_pressed(Button::K) {
             if self.phase == Phase::Ready {
@@ -115,6 +120,7 @@ impl App for Pomodoro {
             } else {
                 self.phase = Phase::Ready;
                 self.paused_ms = None;
+                audio::play(Sound::Tick);
             }
         }
         if self.phase == Phase::Ready {
@@ -164,6 +170,13 @@ impl App for Pomodoro {
     fn on_exit(&mut self, ctx: &mut Ctx) {
         ctx.hw.led_left.set(0);
         ctx.hw.led_right.set(0);
+    }
+
+    fn background(&mut self, now_ms: u32) {
+        let running = self.phase != Phase::Ready && self.paused_ms.is_none();
+        if running && self.remaining_ms(now_ms) == 0 {
+            self.advance(now_ms);
+        }
     }
 }
 

@@ -14,6 +14,7 @@ mod logging;
 #[cfg(feature = "wifi")]
 mod agent;
 mod apps;
+mod audio;
 mod board;
 mod drivers;
 mod hw;
@@ -142,6 +143,7 @@ fn default_config() -> Config {
     c.frame_server.set(option_env!("SPRIG_FRAME_SERVER").unwrap_or("http://192.168.1.9:8000"));
     c.frame_name.set(option_env!("SPRIG_FRAME_NAME").unwrap_or("arpan"));
     c.poll_secs = 15;
+    c.sound = sprig_proto::record::SOUND_DEFAULT;
     c
 }
 
@@ -216,6 +218,20 @@ async fn main(spawner: Spawner) {
         GpioInput::new(p.PIN_15, Pull::Up),
     ]);
 
+    // Speaker: I2S from PIO1 and DMA channel 2, owned by the audio task.
+    audio::set_volume(store.config().sound);
+    info!("sound level: {}", store.config().sound);
+    spawner.spawn(
+        audio::audio_task(audio::Pins {
+            pio: p.PIO1,
+            dma: p.DMA_CH2,
+            din: p.PIN_9,
+            bclk: p.PIN_10,
+            lrclk: p.PIN_11,
+        })
+        .unwrap(),
+    );
+
     // Power monitor and radio. On a plain Pico GP24 and GP29 measure power.
     // On a Pico W they belong to the radio, which the Wi-Fi task owns.
     let (power, mut net) = match module {
@@ -247,9 +263,6 @@ async fn main(spawner: Spawner) {
             (Power::new(adc, None, None), net)
         }
     };
-    #[cfg(not(feature = "wifi"))]
-    let _ = &spawner;
-
     // Splash screen, then fade the backlight in over about 300 ms.
     let mut dma_ok = true;
     ui::splash::draw(fb);

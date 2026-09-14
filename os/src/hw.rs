@@ -3,10 +3,9 @@
 
 use embassy_rp::bind_interrupts;
 use embassy_rp::dma;
-use embassy_rp::peripherals::{DMA_CH0, USB};
+use embassy_rp::peripherals::{DMA_CH0, DMA_CH2, PIO1, USB};
 #[cfg(feature = "wifi")]
 use embassy_rp::peripherals::{DMA_CH1, PIO0};
-#[cfg(feature = "wifi")]
 use embassy_rp::pio;
 use embassy_rp::usb;
 
@@ -32,12 +31,14 @@ pub type Display = St7735<Spi<'static, SPI0, Async>, Output<'static>, Output<'st
 #[cfg(feature = "wifi")]
 bind_interrupts!(pub struct Irqs {
     PIO0_IRQ_0 => pio::InterruptHandler<PIO0>;
-    DMA_IRQ_0 => dma::InterruptHandler<DMA_CH0>, dma::InterruptHandler<DMA_CH1>;
+    PIO1_IRQ_0 => pio::InterruptHandler<PIO1>;
+    DMA_IRQ_0 => dma::InterruptHandler<DMA_CH0>, dma::InterruptHandler<DMA_CH1>, dma::InterruptHandler<DMA_CH2>;
     USBCTRL_IRQ => usb::InterruptHandler<USB>;
 });
 #[cfg(not(feature = "wifi"))]
 bind_interrupts!(pub struct Irqs {
-    DMA_IRQ_0 => dma::InterruptHandler<DMA_CH0>;
+    PIO1_IRQ_0 => pio::InterruptHandler<PIO1>;
+    DMA_IRQ_0 => dma::InterruptHandler<DMA_CH0>, dma::InterruptHandler<DMA_CH2>;
     USBCTRL_IRQ => usb::InterruptHandler<USB>;
 });
 
