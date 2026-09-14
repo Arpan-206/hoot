@@ -22,7 +22,8 @@
 
 use hoot_gfx::{BYTES, CELL_HEIGHT, Framebuffer, Rgb565};
 
-use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};
+use crate::apps::{App, AppInfo, Ctx, Group, Transition, back_pressed};
+use crate::audio::{self, Sound};
 use crate::drivers::dimmer::Dimmer;
 use crate::drivers::input::Button;
 use crate::hw::Pwm;
@@ -112,6 +113,8 @@ pub struct PhotoFrame {
     live_started_ms: u32,
     /// When to put the still back after the last frame.
     live_restore_ms: Option<u32>,
+    /// K was pressed: play now, battery saver or not.
+    live_manual: bool,
 }
 
 impl PhotoFrame {
@@ -131,6 +134,7 @@ impl PhotoFrame {
             live_playing: None,
             live_started_ms: 0,
             live_restore_ms: None,
+            live_manual: false,
         }
     }
 
@@ -299,7 +303,7 @@ impl PhotoFrame {
         };
         let color = if !has_radio || !self.last_error.is_empty() { theme::WARN } else { theme::TEXT };
         row(fb, y, "Status", status, color);
-        theme::footer(fb, "J back   hold L: refetch");
+        theme::footer(fb, "K play   hold L refetch   J back");
     }
 }
 
@@ -344,6 +348,16 @@ impl App for PhotoFrame {
         } else {
             self.hold_started = None;
         }
+        // K plays the motion of a live photo now.
+        if ctx.input.just_pressed(Button::K) && self.photo_on_screen && self.live_playing.is_none() {
+            if self.live_frames > 0 && ctx.net.state().is_up() {
+                self.live_manual = true;
+                self.live_next_ms = now;
+                audio::play(Sound::Tick);
+            } else {
+                info!("live: nothing to play (frames {}, online {})", self.live_frames, ctx.net.state().is_up());
+            }
+        }
 
         let state = ctx.net.state();
         if let Some(n) = self.live_playing {
@@ -364,10 +378,11 @@ impl App for PhotoFrame {
         } else if self.photo_on_screen
             && !self.fetching
             && self.live_frames > 0
-            && !ctx.saver
+            && (!ctx.saver || self.live_manual)
             && state.is_up()
             && now.wrapping_sub(self.live_next_ms) < 1 << 31
         {
+            self.live_manual = false;
             self.live_started_ms = now;
             self.start_live(ctx, 0);
         } else if self.fetching {
