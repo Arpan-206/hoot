@@ -147,11 +147,11 @@ impl Agent {
         }
     }
 
-    fn headers(&self, now: u32, app: &'static str, saver: bool) -> FixedStr<224> {
+    fn headers(&self, now: u32, app: &'static str, saver: bool) -> FixedStr<320> {
         let mut last = [0u8; 48];
         let n = crate::logging::latest(&mut last);
         let last = core::str::from_utf8(&last[..n]).unwrap_or("");
-        let text: StrBuf<224> = format(format_args!(
+        let text: StrBuf<320> = format(format_args!(
             "X-Sprig-Version: {}\r\nX-Sprig-Uptime: {}\r\nX-Sprig-Module: {}\r\nX-Sprig-App: {}\r\nX-Sprig-Saver: {}\r\nX-Sprig-Fails: {}\r\nX-Sprig-Pet: {}\r\nX-Sprig-Error: {}\r\n",
             VERSION,
             now / 1000,
@@ -159,7 +159,7 @@ impl Agent {
             app,
             if saver { "on" } else { "off" },
             self.fails,
-            crate::apps::hoot::mood().label(),
+            crate::apps::hoot::status().as_str(),
             last
         ));
         FixedStr::truncated(text.as_str())
@@ -226,8 +226,7 @@ impl Agent {
                 let _ = store.update_config(|c| c.frame_last_modified.clear());
             }
             "portal" => net.request_portal(),
-            "feed" => crate::apps::hoot::request(crate::apps::hoot::Care::Feed),
-            "play" => crate::apps::hoot::request(crate::apps::hoot::Care::Play),
+            "hug" => crate::apps::hoot::hug(),
             "update" => {
                 self.check_update = true;
                 self.next_ota_ms = now;

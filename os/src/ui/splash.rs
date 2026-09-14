@@ -22,7 +22,7 @@ pub fn blink(fb: &mut Framebuffer, shut: bool) {
 }
 
 /// A crescent: a disc with a second disc taken out of its upper right.
-fn moon(fb: &mut Framebuffer, cx: i32, cy: i32, r: i32) {
+pub fn moon(fb: &mut Framebuffer, cx: i32, cy: i32, r: i32) {
     let (bx, by, br) = (r / 2, -r / 3, r - 1);
     for y in -r..=r {
         for x in -r..=r {
@@ -44,7 +44,7 @@ pub fn draw(fb: &mut Framebuffer) {
 
     let (x, y, scale) = owl_origin();
     let size = owl::SIZE * scale;
-    owl::draw(fb, x, y, scale, false);
+    owl::draw(fb, x, y, scale, false, false);
     let branch_y = y + size - 2;
     fb.fill_rect(x - 18, branch_y, size + 36, 3, BRANCH);
     fb.fill_rect(x - 18, branch_y - 3, 4, 3, BRANCH);

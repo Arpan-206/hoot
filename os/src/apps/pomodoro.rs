@@ -76,6 +76,7 @@ impl Pomodoro {
         let next = match self.phase {
             Phase::Work => {
                 self.sessions = self.sessions.saturating_add(1);
+                crate::apps::hoot::note_focus();
                 Phase::Break
             }
             _ => Phase::Work,

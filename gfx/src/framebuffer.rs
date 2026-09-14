@@ -169,6 +169,12 @@ impl Framebuffer {
         }
     }
 
+    /// Draw `text` centred between `x0` and `x1`, at scale 1.
+    pub fn draw_text_centered_in(&mut self, x0: i32, x1: i32, y: i32, text: &str, fg: Rgb565) {
+        let w = text_width(text, 1);
+        self.draw_text(x0 + (x1 - x0 - w) / 2, y, text, fg, None);
+    }
+
     /// Draw one character at integer `scale`. Returns the horizontal advance.
     ///
     /// `bg` paints the whole 6x8 cell first; `None` leaves the background as is.

@@ -109,10 +109,10 @@ const VERSION: u16 = 1;
 /// Encoded size in bytes: header, payload, CRC. Fields added later sit at
 /// the end of the payload; older, shorter records still decode and the
 /// missing fields take their defaults. Never reorder or remove a field.
-pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 15 + 4;
+pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 24 + 4;
 /// Bytes after `poll_secs`, added by later firmware one at a time.
 #[cfg(test)]
-const TRAILING_LEN: usize = 1 + 1 + 2 + 1 + 1 + 15;
+const TRAILING_LEN: usize = 1 + 1 + 2 + 1 + 1 + 24;
 const HEADER_LEN: usize = 12;
 const CRC_LEN: usize = 4;
 
@@ -176,6 +176,21 @@ impl Reader<'_> {
     }
 }
 
+/// Hoot's state, or `None` when the record predates it (or part of it).
+fn read_pet(r: &mut Reader) -> Option<Pet> {
+    let energy = r.u8()?;
+    let adventures = r.u16()?;
+    let goals_total = r.u16()?;
+    let day = r.u16()?;
+    let done_today = r.u8()?;
+    let checkin = r.u8()?;
+    let mut history = [0u8; 7];
+    history.copy_from_slice(r.take(7)?);
+    let born = r.u32()?;
+    let seen = r.u32()?;
+    Some(Pet { energy, adventures, goals_total, day, done_today, checkin, history, born, seen })
+}
+
 /// Serialise `cfg` with sequence number `seq`. Returns the length written.
 pub fn encode(cfg: &Config, seq: u32, out: &mut [u8]) -> Option<usize> {
     let mut c = Cursor { buf: out, pos: 0 };
@@ -195,11 +210,14 @@ pub fn encode(cfg: &Config, seq: u32, out: &mut [u8]) -> Option<usize> {
     c.put(&cfg.alarm_min.to_le_bytes())?;
     c.put(&[cfg.alarm_on])?;
     c.put(&[cfg.alarm_tone])?;
-    c.put(&[cfg.pet.hunger, cfg.pet.happy, cfg.pet.energy])?;
+    c.put(&[cfg.pet.energy])?;
+    c.put(&cfg.pet.adventures.to_le_bytes())?;
+    c.put(&cfg.pet.goals_total.to_le_bytes())?;
+    c.put(&cfg.pet.day.to_le_bytes())?;
+    c.put(&[cfg.pet.done_today, cfg.pet.checkin])?;
+    c.put(&cfg.pet.history)?;
     c.put(&cfg.pet.born.to_le_bytes())?;
     c.put(&cfg.pet.seen.to_le_bytes())?;
-    c.put(&cfg.pet.fed.to_le_bytes())?;
-    c.put(&cfg.pet.played.to_le_bytes())?;
     let body_len = c.pos;
     let crc = crc32(&c.buf[..body_len]);
     c.put(&crc.to_le_bytes())?;
@@ -239,12 +257,7 @@ pub fn decode(buf: &[u8]) -> Option<(Config, u32)> {
         alarm_min: r.u16().unwrap_or(ALARM_DEFAULT_MIN),
         alarm_on: r.u8().unwrap_or(0),
         alarm_tone: r.u8().unwrap_or(0),
-        pet: match (r.u8(), r.u8(), r.u8(), r.u32(), r.u32(), r.u16(), r.u16()) {
-            (Some(hunger), Some(happy), Some(energy), Some(born), Some(seen), Some(fed), Some(played)) => {
-                Pet { hunger, happy, energy, born, seen, fed, played }
-            }
-            _ => Pet::new(),
-        },
+        pet: read_pet(&mut r).unwrap_or_default(),
     };
     Some((cfg, seq))
 }
@@ -267,7 +280,17 @@ mod tests {
         c.alarm_min = 6 * 60 + 30;
         c.alarm_on = 1;
         c.alarm_tone = 2;
-        c.pet = Pet { hunger: 33, happy: 61, energy: 90, born: 1_789_000_000, seen: 1_789_100_000, fed: 4, played: 2 };
+        c.pet = Pet {
+            energy: 60,
+            adventures: 4,
+            goals_total: 23,
+            day: 20_710,
+            done_today: 0b0001_0011,
+            checkin: 4,
+            history: [0, 3, 4, 4, 5, 2, 4],
+            born: 1_789_000_000,
+            seen: 1_789_100_000,
+        };
         c
     }
 

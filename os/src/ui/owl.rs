@@ -62,6 +62,15 @@ const BEAK_ROWS: [u16; SIZE as usize] = [
     0b0000_0001_1000_0000,
     0, 0, 0, 0, 0, 0, 0, 0,
 ];
+/// Round spectacles for the wise owl.
+const GLASSES: [u16; SIZE as usize] = [
+    0, 0, 0,
+    0b0001_1110_0111_1000,
+    0b0001_0011_1100_1000,
+    0b0001_0010_0100_1000,
+    0b0001_1110_0111_1000,
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+];
 /// Wing edges, a shade darker than the body.
 const WINGS: [u16; SIZE as usize] = [
     0, 0, 0, 0, 0,
@@ -85,12 +94,15 @@ fn layer(fb: &mut Framebuffer, x: i32, y: i32, rows: &[u16; SIZE as usize], colo
 }
 
 /// The whole owl with its top-left corner at `x`, `y`.
-pub fn draw(fb: &mut Framebuffer, x: i32, y: i32, scale: i32, eyes_shut: bool) {
+pub fn draw(fb: &mut Framebuffer, x: i32, y: i32, scale: i32, eyes_shut: bool, glasses: bool) {
     layer(fb, x, y, &BODY, FEATHER, scale);
     layer(fb, x, y, &WINGS, WING, scale);
     layer(fb, x, y, &FACE, theme::TEXT, scale);
     draw_eyes(fb, x, y, scale, eyes_shut);
     layer(fb, x, y, &BEAK_ROWS, BEAK, scale);
+    if glasses {
+        layer(fb, x, y, &GLASSES, BEAK, scale);
+    }
 }
 
 /// Only the eyes, for blinking over an owl already drawn.

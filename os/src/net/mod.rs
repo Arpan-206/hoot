@@ -114,7 +114,7 @@ pub struct FetchRequest {
     /// Empty means no `If-Modified-Since` header.
     pub if_modified_since: FixedStr<40>,
     /// Extra header lines, each ending in `\r\n`. Used for the heartbeat.
-    pub headers: FixedStr<224>,
+    pub headers: FixedStr<320>,
     pub body: Body,
     pub sink: Sink,
 }

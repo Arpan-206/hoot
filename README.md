@@ -27,7 +27,7 @@ a 160x128 colour display, eight buttons, two white LEDs and a speaker.
 | Home menu with grouped apps (Frame, Fun, Tools) | Done |
 | Speaker: I2S tones from PIO1 and DMA, volume setting | Done, verified on hardware |
 | Clock from the server heartbeat, daily alarm | Done, verified on hardware |
-| Hoot the owl: needs, sleep, growth, remote care | Done, untested on hardware |
+| Hoot the owl: check-in, goals, breathing, adventures, growth, hugs | Done, untested on hardware |
 | Slideshow of the last uploads, cached in flash | Done, untested on hardware |
 | Reboot to USB flash mode from the menu | Done |
 | Pico vs Pico W detection at boot | Done, verified on hardware |
@@ -158,7 +158,8 @@ Messages also shows next to Frame on the top menu.
 | Photo frame | Hold L for 2 s | Forget the cached photo time and fetch again |
 | Messages | W/S, L, K | Move, mark the selected message seen, refresh |
 | Pomodoro | L, K | Start or pause, stop. W/S and A/D set the lengths while ready |
-| Hoot | L, K, D | Feed, play, stroke. Any of them wakes it |
+| Hoot | W/S, L, K | Pick a goal, do it or take it back, send Hoot off when the bar is full |
+| Hoot: check in | A/D, L, J | Pick a face, confirm, or skip |
 | Stopwatch | L, K | Start or stop. Lap while running, reset while stopped |
 | Clock | W/S, A/D, L | Hour, minute, zero the seconds. Sets the clock by hand |
 | Alarm | W/S, A/D, L, K | Hour, minute, on or off, next tone. While ringing: L stops, K snoozes 5 min |
@@ -251,31 +252,40 @@ by itself.
 
 ## Hoot, the owl
 
-Hoot is the first entry of the menu and the screen the menu comes back to
-after a quiet minute. It is not an app in the usual sense: it runs in the
-background whatever is on screen, so it lives at the pace of the clock.
+Hoot is a companion in the spirit of Finch. It is not a mouth to feed: it
+grows when you look after yourself, and nothing is lost for a missed day.
+It is the first entry of the menu and the screen the menu comes back to
+after a quiet minute. It runs in the background whatever is on screen.
 
-Three needs go from 0 to 100: how full it is, how happy, how rested. They
-drift every ten minutes. Awake, it gets hungry and slowly bored. Asleep,
-it rests. It sleeps from 22:00 to 07:00 by the clock, or earlier when worn
-out, and any care wakes it for a minute. Starving makes it sad fast. It
-never dies; at worst it sulks until someone comes by.
+Each day has a check-in and six small goals. Every one done gives Hoot 20
+energy. At 100 the bar is full and K sends Hoot on an adventure: it flies
+off, comes back with a discovery, and the count of adventures is what
+makes it grow.
 
-| Key | Care | Effect |
-| --- | --- | --- |
-| L | Feed | Hunger down 40, a little happier. Refused when full |
-| K | Play | Happier by 25, a bit tired and hungry. Refused when worn out |
-| D | Stroke | A little happier |
+| Goal | How it is done |
+| --- | --- |
+| Check in | Pick one of five faces for how you feel. Once a day. Hoot answers. Stays on the device |
+| Drink water, Move a little, See daylight, Wind down | Tick with L. L again takes it back |
+| Focus session | Counted for you when a Pomodoro work session ends. L also ticks it |
+| Breathe with Hoot | A minute of box breathing: in, hold, out, hold, four rounds. A ring grows and shrinks, the LEDs breathe with it. J stops it early without credit |
 
-It grows with age: owlet for three days, then owl, then wise owl after two
-weeks. Its state lives in the config record, saved after care and every
-ten minutes, and it catches up on the time it was off once the clock is
-known, up to a day.
+| Adventures | Stage |
+| --- | --- |
+| 0 to 2 | hatchling |
+| 3 to 9 | owlet |
+| 10 to 24 | fledgling |
+| 25 to 59 | owl |
+| 60 and up | wise owl, with spectacles |
 
-Family can feed it and play with it from the web page. Those are server
-commands, delivered with the heartbeat like the others, and the heartbeat
-carries its mood back, so the Device card says how Hoot is. The menu shows
-a word next to Hoot when it needs something.
+Hoot sleeps from 22:00 to 07:00 by the clock and snores on the menu. Any
+key wakes it for a minute. The day turns over with the clock, so a plain
+Pico without a set time keeps one long day.
+
+Family can send a hug from the web page. It arrives as the server command
+`hug`, gives 10 energy, and Hoot says so. The heartbeat carries Hoot's
+stage, energy and goals for the day in `X-Sprig-Pet`. The check-in never
+leaves the device. Hoot's state lives in the config record, saved after
+each change and every ten minutes.
 
 ## Clock and alarm
 
