@@ -86,6 +86,10 @@ pub struct Config {
     pub power_mode: u8,
     /// Speaker volume, 0 (off) to 10.
     pub sound: u8,
+    /// Daily alarm: minutes after midnight, on/off, and the tone index.
+    pub alarm_min: u16,
+    pub alarm_on: u8,
+    pub alarm_tone: u8,
 }
 
 pub const POWER_AUTO: u8 = 0;
@@ -94,13 +98,18 @@ pub const POWER_NORMAL: u8 = 2;
 pub const SOUND_OFF: u8 = 0;
 pub const SOUND_MAX: u8 = 10;
 pub const SOUND_DEFAULT: u8 = 8;
+/// 07:00.
+pub const ALARM_DEFAULT_MIN: u16 = 7 * 60;
 
 const MAGIC: &[u8; 4] = b"SPCF";
 const VERSION: u16 = 1;
 /// Encoded size in bytes: header, payload, CRC. Fields added later sit at
 /// the end of the payload; older, shorter records still decode and the
 /// missing fields take their defaults. Never reorder or remove a field.
-pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 4;
+pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 4;
+/// Bytes after `poll_secs`, added by later firmware one at a time.
+#[cfg(test)]
+const TRAILING_LEN: usize = 1 + 1 + 2 + 1 + 1;
 const HEADER_LEN: usize = 12;
 const CRC_LEN: usize = 4;
 
@@ -180,6 +189,9 @@ pub fn encode(cfg: &Config, seq: u32, out: &mut [u8]) -> Option<usize> {
     c.put(&cfg.poll_secs.to_le_bytes())?;
     c.put(&[cfg.power_mode])?;
     c.put(&[cfg.sound])?;
+    c.put(&cfg.alarm_min.to_le_bytes())?;
+    c.put(&[cfg.alarm_on])?;
+    c.put(&[cfg.alarm_tone])?;
     let body_len = c.pos;
     let crc = crc32(&c.buf[..body_len]);
     c.put(&crc.to_le_bytes())?;
@@ -216,6 +228,9 @@ pub fn decode(buf: &[u8]) -> Option<(Config, u32)> {
         poll_secs: r.u16().unwrap_or(15),
         power_mode: r.u8().unwrap_or(POWER_AUTO),
         sound: r.u8().unwrap_or(SOUND_DEFAULT),
+        alarm_min: r.u16().unwrap_or(ALARM_DEFAULT_MIN),
+        alarm_on: r.u8().unwrap_or(0),
+        alarm_tone: r.u8().unwrap_or(0),
     };
     Some((cfg, seq))
 }
@@ -235,15 +250,18 @@ mod tests {
         c.poll_secs = 15;
         c.power_mode = POWER_SAVER;
         c.sound = 7;
+        c.alarm_min = 6 * 60 + 30;
+        c.alarm_on = 1;
+        c.alarm_tone = 2;
         c
     }
 
-    /// A record as older firmware wrote it: same layout without the
-    /// trailing `power_mode` and `sound` bytes, with its own length and CRC.
+    /// A record as the first firmware wrote it: same layout without the
+    /// trailing bytes later versions added, with its own length and CRC.
     fn older_record(cfg: &Config, seq: u32) -> Vec<u8> {
         let mut buf = [0u8; 512];
         let n = encode(cfg, seq, &mut buf).unwrap();
-        let mut old = buf[..n - CRC_LEN - 2].to_vec(); // drop power_mode, sound and the CRC
+        let mut old = buf[..n - CRC_LEN - TRAILING_LEN].to_vec(); // drop the newer fields and the CRC
         let len = (old.len() + CRC_LEN) as u16;
         old[6..8].copy_from_slice(&len.to_le_bytes());
         let crc = crc32(&old);
@@ -254,7 +272,7 @@ mod tests {
     #[test]
     fn decodes_records_from_older_firmware() {
         let old = older_record(&sample(), 7);
-        assert_eq!(old.len(), RECORD_LEN - 2);
+        assert_eq!(old.len(), RECORD_LEN - TRAILING_LEN);
         let (cfg, seq) = decode(&old).unwrap();
         assert_eq!(seq, 7);
         assert_eq!(cfg.wifi_ssid, sample().wifi_ssid);
@@ -262,6 +280,8 @@ mod tests {
         assert_eq!(cfg.poll_secs, 15);
         assert_eq!(cfg.power_mode, POWER_AUTO, "missing field takes its default");
         assert_eq!(cfg.sound, SOUND_DEFAULT, "missing field takes its default");
+        assert_eq!(cfg.alarm_min, ALARM_DEFAULT_MIN);
+        assert_eq!((cfg.alarm_on, cfg.alarm_tone), (0, 0));
     }
 
     #[test]

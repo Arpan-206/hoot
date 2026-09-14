@@ -18,10 +18,12 @@ a 160x128 colour display, eight buttons, two white LEDs and a speaker.
 | Backlight and LED dimming (PWM) | Done |
 | USB and battery voltage readout | Done |
 | Home menu with grouped apps (Frame, Fun, Tools) | Done |
-| Speaker: I2S tones from PIO1 and DMA, volume setting | Done, untested on hardware |
+| Speaker: I2S tones from PIO1 and DMA, volume setting | Done, verified on hardware |
+| Clock from the server heartbeat, daily alarm | Done, untested on hardware |
+| Slideshow of the last uploads, cached in flash | Done, untested on hardware |
 | Reboot to USB flash mode from the menu | Done |
 | Pico vs Pico W detection at boot | Done, verified on hardware |
-| Flash storage: config record and 64 KiB blob slots | Done, untested on hardware |
+| Flash storage: config record and 44 KiB blob slots | Done, verified on hardware |
 | Wi-Fi, DHCP, DNS and HTTP client (Pico W, `wifi` feature) | Done, untested on hardware |
 | Photo frame app | Done, untested on hardware |
 | Wi-Fi setup on the device: hotspot, QR code, captive portal | Done, verified with a phone |
@@ -126,9 +128,9 @@ submenus from that. A group with nothing usable on the board is hidden.
 | Menu | Entries |
 | --- | --- |
 | Top | Frame, Fun, Tools, About, Settings, Developer |
-| Frame | Photo frame, Messages |
-| Fun | Fireplace, Aquarium |
-| Tools | Pomodoro, Stopwatch |
+| Frame | Photo frame, Messages, Slideshow |
+| Fun | Fireplace, Aquarium, Sounds |
+| Tools | Pomodoro, Stopwatch, Clock, Alarm |
 | Settings | Network, Battery saver, Volume, Clear photo cache, Reboot, Reboot to USB |
 | Developer | Input test, LEDs & backlight, Display test, Speaker test |
 
@@ -149,6 +151,10 @@ Messages also shows next to Frame on the top menu.
 | Messages | W/S, L, K | Move, mark the selected message seen, refresh |
 | Pomodoro | L, K | Start or pause, stop. W/S and A/D set the lengths while ready |
 | Stopwatch | L, K | Start or stop. Lap while running, reset while stopped |
+| Clock | W/S, A/D, L | Hour, minute, zero the seconds. Sets the clock by hand |
+| Alarm | W/S, A/D, L, K | Hour, minute, on or off, next tone. While ringing: L stops, K snoozes 5 min |
+| Sounds | W A S D I K L | One sound per key |
+| Slideshow | A/D, W/S | Previous or next photo, dwell time down or up in 5 s steps |
 | Fireplace | W/S | More or less fuel |
 | Network (Pico W only) | L or D | Connect to Wi-Fi |
 | Network (Pico W only) | K | Open the setup hotspot |
@@ -233,6 +239,30 @@ The radio already sleeps between packets in every mode, and the display
 is only written when something changed, so the rest of the system idles
 by itself.
 
+## Clock and alarm
+
+The board has no clock chip. On a Pico W the server sends its time and the
+frame's zone offset with every heartbeat, so the clock is right within a
+minute of joining Wi-Fi. Set a frame's zone on the web page (an IANA name
+such as `Europe/London`); it defaults to the server's own zone. Any board
+can have the time set by hand in the Clock app. The time is lost at
+power-off.
+
+The Alarm app keeps one daily alarm in the config record: time, on or
+off, and a tone. It fires through the `background` hook, so the shell
+opens the alarm screen from whatever is showing, plays the tone on repeat
+with both LEDs flashing, and gives up after two minutes. L stops it, K
+snoozes for five minutes.
+
+## Slideshow
+
+Every photo upload also goes into an album on the server, at frame size
+and without the caption. The server keeps the last eight. The Slideshow
+app lists them, fetches the newest six it does not yet have into blob
+slots 2 to 7, and cycles through them newest first. Photos survive
+reboots, so the show runs from flash when the network is down. The list is
+refreshed every five minutes.
+
 ## Sounds
 
 The Sprig has a small speaker on a MAX98357A amplifier. The OS drives it
@@ -241,7 +271,8 @@ for a named sound and carry on: a tick for a key press, a rising chime
 when a Pomodoro work session ends, a falling one when the break ends.
 Settings has a Volume screen: A/D move the level from 0 to 10 with a
 tick at each step, and L plays the chime. The level is stored in the
-config record. Timers fire
+config record. The Sounds app under Fun puts seven sounds on seven keys;
+the alarm can use four of them as its tone. Timers fire
 their chime from the menu too, through the `background` hook that runs
 every frame for every app that is not on screen.
 
@@ -353,7 +384,8 @@ there reboots into USB flash mode.
 | 0x007000 | 640 KiB | Active firmware, where the OS runs |
 | 0x0A7000 | 644 KiB | Update partition, written over the air |
 | 0x148000 | 288 KiB | Radio firmware for the Pico W, written once |
-| 0x190000 | 384 KiB | 6 blob slots of 64 KiB. Photos use slots 0 and 1 |
+| 0x190000 | 352 KiB | 8 blob slots of 44 KiB. The photo frame uses slots 0 and 1, the slideshow 2 to 7 |
+| 0x1E8000 | 32 KiB | Free |
 | 0x1F0000 | 8 KiB | Config record, two sectors written alternately |
 | 0x1F2000 | 56 KiB | Free |
 

@@ -31,10 +31,12 @@ pub mod flash_map {
     /// partitions, so an update never re-sends the 231 KiB blob.
     pub const RADIO_START: u32 = 0x14_8000;
     pub const RADIO_SIZE: u32 = 0x4_8000;
-    /// Blob store: large records such as cached photos. 6 slots of 64 KiB.
+    /// Blob store: large records such as cached photos. 8 slots of 44 KiB:
+    /// a header sector plus a 40 KiB frame. Slots 0 and 1 hold the photo
+    /// frame's picture, 2 to 7 the slideshow album. Ends at 0x1E_8000.
     pub const BLOBS_START: u32 = 0x19_0000;
-    pub const BLOB_SLOT_SIZE: u32 = 0x1_0000;
-    pub const BLOB_SLOTS: u8 = 6;
+    pub const BLOB_SLOT_SIZE: u32 = 0xB000;
+    pub const BLOB_SLOTS: u8 = 8;
     /// Config store: two 4 KiB sectors written alternately.
     pub const CONFIG_START: u32 = 0x1F_0000;
     pub const CONFIG_SECTORS: u32 = 2;

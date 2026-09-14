@@ -14,6 +14,10 @@ pub struct Head<'a> {
     pub command: Option<&'a str>,
     /// `X-Sprig-Unread`: unread messages waiting on the server.
     pub unread: Option<u8>,
+    /// `X-Sprig-Time`: the server's clock, seconds since 1970 UTC.
+    pub time: Option<u32>,
+    /// `X-Sprig-Tz`: the frame's zone offset from UTC, in minutes.
+    pub tz_min: Option<i16>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -78,6 +82,10 @@ pub fn parse_head(head: &[u8]) -> Result<Head<'_>, HeadError> {
             out.command = Some(value);
         } else if name.eq_ignore_ascii_case("x-sprig-unread") {
             out.unread = value.parse().ok();
+        } else if name.eq_ignore_ascii_case("x-sprig-time") {
+            out.time = value.parse().ok();
+        } else if name.eq_ignore_ascii_case("x-sprig-tz") {
+            out.tz_min = value.parse().ok();
         }
     }
     Ok(out)

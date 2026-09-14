@@ -172,7 +172,8 @@ impl App for Pomodoro {
         ctx.hw.led_right.set(0);
     }
 
-    fn background(&mut self, now_ms: u32) {
+    fn background(&mut self, ctx: &mut Ctx) {
+        let now_ms = ctx.now_ms;
         let running = self.phase != Phase::Ready && self.paused_ms.is_none();
         if running && self.remaining_ms(now_ms) == 0 {
             self.advance(now_ms);

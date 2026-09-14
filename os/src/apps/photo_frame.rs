@@ -135,7 +135,7 @@ impl PhotoFrame {
     fn start_fetch(&mut self, ctx: &mut Ctx) {
         let cfg = ctx.store.config();
         let slot = if cfg.frame_slot == SLOT_A { SLOT_B } else { SLOT_A };
-        let mut request = FetchRequest::get(Self::photo_url(cfg), Sink::Blob { slot, kind: KIND_PHOTO });
+        let mut request = FetchRequest::get(Self::photo_url(cfg), Sink::Blob { slot, kind: KIND_PHOTO, seq: 0 });
         if !self.force {
             request.if_modified_since = cfg.frame_last_modified;
         }
@@ -240,7 +240,9 @@ impl App for PhotoFrame {
         self.photo_on_screen = Self::show_slot(ctx, slot);
         info!("photo: enter, cached photo in slot {}: {}", slot, self.photo_on_screen);
         self.fetching = false;
-        self.force = false;
+        // No cached photo, for example after the flash layout changed:
+        // fetch again even if the server says nothing is new.
+        self.force = !self.photo_on_screen;
         self.fails = 0;
         self.last_error.clear();
         self.next_poll_ms = ctx.now_ms;

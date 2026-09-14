@@ -89,8 +89,8 @@ impl NetState {
 /// Where a response body goes.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Sink {
-    /// Stream into a blob slot in flash, tagged with `kind`.
-    Blob { slot: u8, kind: u32 },
+    /// Stream into a blob slot in flash, tagged with `kind` and `seq`.
+    Blob { slot: u8, kind: u32, seq: u32 },
     /// Keep up to `SMALL_BODY_MAX` bytes in RAM. Read with `small_body`.
     Small,
     /// Stream a firmware image into the update partition and mark it.
@@ -137,6 +137,10 @@ pub struct FetchResult {
     pub command: FixedStr<16>,
     /// `X-Sprig-Unread` from the server: messages waiting.
     pub unread: u8,
+    /// `X-Sprig-Time` from the server, seconds since 1970 UTC, if sent.
+    pub time: Option<u32>,
+    /// `X-Sprig-Tz`: the frame's zone offset in minutes. Zero if not sent.
+    pub tz_min: i16,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

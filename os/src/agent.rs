@@ -14,6 +14,7 @@ use portable_atomic::{AtomicU8, Ordering};
 
 use crate::VERSION;
 use crate::apps::photo_frame;
+use crate::clock::{self, Source};
 use crate::net::{Body, FetchRequest, FetchResult, FixedStr, JobState, Lane, NetHandle, Sink};
 use crate::storage::{Config, Storage};
 use sprig_proto::record::{POWER_AUTO, POWER_NORMAL, POWER_SAVER};
@@ -198,6 +199,13 @@ impl Agent {
         } else {
             self.fails = 0;
             set_unread(r.unread);
+            if let Some(utc) = r.time {
+                let was_set = clock::source() != Source::Unset;
+                clock::set(utc.wrapping_add_signed(r.tz_min as i32 * 60), now, Source::Server);
+                if !was_set {
+                    info!("clock set from server, zone offset {} min", r.tz_min);
+                }
+            }
         }
         if !r.command.is_empty() {
             self.run_command(net, store, now, r.command.as_str());

@@ -117,6 +117,8 @@ pub async fn fetch(
         crc32: 0,
         command: FixedStr::truncated(head.command.unwrap_or("")),
         unread: head.unread.unwrap_or(0),
+        time: head.time,
+        tz_min: head.tz_min.unwrap_or(0),
     };
     if head.status != 200 {
         sock.close();
@@ -130,11 +132,11 @@ pub async fn fetch(
     // Body: whatever came with the head first, then the rest of the stream.
     let mut total: usize = 0;
     match req.sink {
-        Sink::Blob { slot, kind } => {
+        Sink::Blob { slot, kind, seq } => {
             if content_length.is_some_and(|l| l as u32 > BLOB_DATA_MAX) {
                 return Err(FetchError::TooLarge);
             }
-            let mut w = BlobWriter::begin(flash, slot, kind, 0).map_err(|_| FetchError::Storage)?;
+            let mut w = BlobWriter::begin(flash, slot, kind, seq).map_err(|_| FetchError::Storage)?;
             let leftover = filled - head_end;
             if leftover > 0 {
                 w.write(&buf[head_end..filled]).map_err(|_| FetchError::Storage)?;

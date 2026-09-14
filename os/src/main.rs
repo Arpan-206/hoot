@@ -15,6 +15,7 @@ mod logging;
 mod agent;
 mod apps;
 mod audio;
+mod clock;
 mod board;
 mod drivers;
 mod hw;
@@ -144,6 +145,7 @@ fn default_config() -> Config {
     c.frame_name.set(option_env!("SPRIG_FRAME_NAME").unwrap_or("arpan"));
     c.poll_secs = 15;
     c.sound = sprig_proto::record::SOUND_DEFAULT;
+    c.alarm_min = sprig_proto::record::ALARM_DEFAULT_MIN;
     c
 }
 

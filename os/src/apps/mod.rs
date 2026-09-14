@@ -50,7 +50,9 @@
 //! something while another screen is up implements `background`.
 
 pub mod about;
+pub mod alarm;
 pub mod aquarium;
+pub mod clock;
 pub mod display_test;
 pub mod fireplace;
 pub mod input_test;
@@ -62,6 +64,9 @@ pub mod network;
 #[cfg(feature = "wifi")]
 pub mod photo_frame;
 pub mod pomodoro;
+#[cfg(feature = "wifi")]
+pub mod slideshow;
+pub mod sounds;
 pub mod speaker_test;
 pub mod stopwatch;
 pub mod volume;
@@ -151,8 +156,8 @@ pub trait App {
 
     /// Called every frame for every app that is not on screen. Timers use
     /// it to finish and sound their chime while another screen is up. Keep
-    /// it cheap: no drawing, no hardware.
-    fn background(&mut self, _now_ms: u32) {}
+    /// it cheap, and do not draw: the screen belongs to someone else.
+    fn background(&mut self, _ctx: &mut Ctx) {}
 
     /// Called once per frame. Draw into `ctx.fb`, or draw nothing to keep
     /// the previous frame on screen.

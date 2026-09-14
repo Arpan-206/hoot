@@ -13,7 +13,9 @@ use sprig_gfx::{CELL_HEIGHT, WIDTH};
 use sprig_proto::record::{POWER_AUTO, POWER_NORMAL, POWER_SAVER};
 
 use crate::apps::about::{self, About};
+use crate::apps::alarm::{self, Alarm};
 use crate::apps::aquarium::{self, Aquarium};
+use crate::apps::clock::{self, Clock};
 use crate::apps::display_test::{self, DisplayTest};
 use crate::apps::fireplace::{self, Fireplace};
 use crate::apps::input_test::{self, InputTest};
@@ -25,6 +27,9 @@ use crate::apps::network::{self, NetworkApp};
 #[cfg(feature = "wifi")]
 use crate::apps::photo_frame::{self, PhotoFrame};
 use crate::apps::pomodoro::{self, Pomodoro};
+#[cfg(feature = "wifi")]
+use crate::apps::slideshow::{self, Slideshow};
+use crate::apps::sounds::{self, Sounds};
 use crate::apps::speaker_test::{self, SpeakerTest};
 use crate::apps::stopwatch::{self, Stopwatch};
 use crate::apps::volume::{self, Volume};
@@ -52,12 +57,17 @@ enum AppId {
     SpeakerTest,
     Pomodoro,
     Stopwatch,
+    Clock,
+    Alarm,
     Fireplace,
     Aquarium,
+    Sounds,
     #[cfg(feature = "wifi")]
     PhotoFrame,
     #[cfg(feature = "wifi")]
     Messages,
+    #[cfg(feature = "wifi")]
+    Slideshow,
     #[cfg(feature = "wifi")]
     Network,
 }
@@ -125,10 +135,15 @@ const APPS: &[(Group, Entry)] = &[
     (photo_frame::INFO.group, app(&photo_frame::INFO, AppId::PhotoFrame)),
     #[cfg(feature = "wifi")]
     (messages::INFO.group, app(&messages::INFO, AppId::Messages)),
+    #[cfg(feature = "wifi")]
+    (slideshow::INFO.group, app(&slideshow::INFO, AppId::Slideshow)),
     (fireplace::INFO.group, app(&fireplace::INFO, AppId::Fireplace)),
     (aquarium::INFO.group, app(&aquarium::INFO, AppId::Aquarium)),
+    (sounds::INFO.group, app(&sounds::INFO, AppId::Sounds)),
     (pomodoro::INFO.group, app(&pomodoro::INFO, AppId::Pomodoro)),
     (stopwatch::INFO.group, app(&stopwatch::INFO, AppId::Stopwatch)),
+    (clock::INFO.group, app(&clock::INFO, AppId::Clock)),
+    (alarm::INFO.group, app(&alarm::INFO, AppId::Alarm)),
     (input_test::INFO.group, app(&input_test::INFO, AppId::InputTest)),
     (leds::INFO.group, app(&leds::INFO, AppId::Leds)),
     (display_test::INFO.group, app(&display_test::INFO, AppId::DisplayTest)),
@@ -191,12 +206,17 @@ pub struct Shell {
     speaker_test: SpeakerTest,
     pomodoro: Pomodoro,
     stopwatch: Stopwatch,
+    clock: Clock,
+    alarm: Alarm,
     fireplace: Fireplace,
     aquarium: Aquarium,
+    sounds: Sounds,
     #[cfg(feature = "wifi")]
     photo_frame: PhotoFrame,
     #[cfg(feature = "wifi")]
     messages: Messages,
+    #[cfg(feature = "wifi")]
+    slideshow: Slideshow,
     #[cfg(feature = "wifi")]
     network: NetworkApp,
 }
@@ -223,12 +243,17 @@ impl Shell {
             speaker_test: SpeakerTest::new(),
             pomodoro: Pomodoro::new(),
             stopwatch: Stopwatch::new(),
+            clock: Clock::new(),
+            alarm: Alarm::new(),
             fireplace: Fireplace::new(),
             aquarium: Aquarium::new(),
+            sounds: Sounds::new(),
             #[cfg(feature = "wifi")]
             photo_frame: PhotoFrame::new(),
             #[cfg(feature = "wifi")]
             messages: Messages::new(),
+            #[cfg(feature = "wifi")]
+            slideshow: Slideshow::new(),
             #[cfg(feature = "wifi")]
             network: NetworkApp,
         };
@@ -308,12 +333,17 @@ impl Shell {
             AppId::SpeakerTest => &mut self.speaker_test,
             AppId::Pomodoro => &mut self.pomodoro,
             AppId::Stopwatch => &mut self.stopwatch,
+            AppId::Clock => &mut self.clock,
+            AppId::Alarm => &mut self.alarm,
             AppId::Fireplace => &mut self.fireplace,
             AppId::Aquarium => &mut self.aquarium,
+            AppId::Sounds => &mut self.sounds,
             #[cfg(feature = "wifi")]
             AppId::PhotoFrame => &mut self.photo_frame,
             #[cfg(feature = "wifi")]
             AppId::Messages => &mut self.messages,
+            #[cfg(feature = "wifi")]
+            AppId::Slideshow => &mut self.slideshow,
             #[cfg(feature = "wifi")]
             AppId::Network => &mut self.network,
         }
@@ -359,8 +389,17 @@ impl Shell {
             if let Action::Launch(id) = entry.action
                 && self.running != Some(id)
             {
-                self.app(id).background(ctx.now_ms);
+                self.app(id).background(ctx);
             }
+        }
+        // A ringing alarm takes the screen from whatever is on it.
+        if self.alarm.is_ringing() && self.running != Some(AppId::Alarm) {
+            if let Some(id) = self.running {
+                self.app(id).on_exit(ctx);
+            }
+            info!("open app: Alarm (ringing)");
+            self.running = Some(AppId::Alarm);
+            self.alarm.on_enter(ctx);
         }
 
         if let Some(id) = self.running {

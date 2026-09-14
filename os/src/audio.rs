@@ -41,7 +41,21 @@ pub enum Sound {
     /// Three loud tones at full scale, for the speaker test. Plays even
     /// when sounds are off.
     Test,
+    /// Two quick notes, like picking up a coin.
+    Coin,
+    /// A fast falling zap.
+    Laser,
+    /// The first Westminster quarter, up an octave for the small speaker.
+    Bell,
+    /// Two tones alternating.
+    Siren,
+    /// Urgent beeps, for the alarm.
+    Alarm,
 }
+
+/// The tones an alarm can use, by name.
+pub const TUNES: [(&str, Sound); 4] =
+    [("Beeps", Sound::Alarm), ("Bell", Sound::Bell), ("Siren", Sound::Siren), ("Chime", Sound::Done)];
 
 /// One note: frequency in Hz and length in ms. Frequency 0 is a rest.
 type Note = (u16, u16);
@@ -53,7 +67,48 @@ impl Sound {
             Sound::Done => &[(1047, 120), (1319, 120), (1568, 120), (2093, 300)],
             Sound::Rest => &[(1568, 150), (1319, 150), (1047, 320)],
             Sound::Test => &[(440, 500), (1000, 500), (2000, 500)],
+            Sound::Coin => &[(988, 60), (1319, 350)],
+            Sound::Laser => &[
+                (3000, 25),
+                (2500, 25),
+                (2100, 25),
+                (1750, 25),
+                (1450, 25),
+                (1200, 25),
+                (950, 25),
+                (700, 60),
+            ],
+            Sound::Bell => &[
+                (1319, 250),
+                (1047, 250),
+                (1175, 250),
+                (784, 500),
+                (0, 150),
+                (784, 250),
+                (1175, 250),
+                (1319, 250),
+                (1047, 500),
+            ],
+            Sound::Siren => &[(800, 180), (1100, 180), (800, 180), (1100, 180), (800, 180), (1100, 180)],
+            Sound::Alarm => &[
+                (2000, 80),
+                (0, 60),
+                (2000, 80),
+                (0, 60),
+                (2000, 80),
+                (0, 300),
+                (2000, 80),
+                (0, 60),
+                (2000, 80),
+                (0, 60),
+                (2000, 80),
+            ],
         }
+    }
+
+    /// How long the sound lasts.
+    pub fn len_ms(self) -> u32 {
+        self.notes().iter().map(|n| n.1 as u32).sum()
     }
 }
 
