@@ -109,10 +109,10 @@ const VERSION: u16 = 1;
 /// Encoded size in bytes: header, payload, CRC. Fields added later sit at
 /// the end of the payload; older, shorter records still decode and the
 /// missing fields take their defaults. Never reorder or remove a field.
-pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 24 + 4;
+pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 33 + 4;
 /// Bytes after `poll_secs`, added by later firmware one at a time.
 #[cfg(test)]
-const TRAILING_LEN: usize = 1 + 1 + 2 + 1 + 1 + 24;
+const TRAILING_LEN: usize = 1 + 1 + 2 + 1 + 1 + 33;
 const HEADER_LEN: usize = 12;
 const CRC_LEN: usize = 4;
 
@@ -186,9 +186,13 @@ fn read_pet(r: &mut Reader) -> Option<Pet> {
     let checkin = r.u8()?;
     let mut history = [0u8; 7];
     history.copy_from_slice(r.take(7)?);
+    let mut goal_hist = [0u8; 7];
+    goal_hist.copy_from_slice(r.take(7)?);
+    let flags = r.u8()?;
+    let outfit = r.u8()?;
     let born = r.u32()?;
     let seen = r.u32()?;
-    Some(Pet { energy, adventures, goals_total, day, done_today, checkin, history, born, seen })
+    Some(Pet { energy, adventures, goals_total, day, done_today, checkin, history, goal_hist, flags, outfit, born, seen })
 }
 
 /// Serialise `cfg` with sequence number `seq`. Returns the length written.
@@ -216,6 +220,8 @@ pub fn encode(cfg: &Config, seq: u32, out: &mut [u8]) -> Option<usize> {
     c.put(&cfg.pet.day.to_le_bytes())?;
     c.put(&[cfg.pet.done_today, cfg.pet.checkin])?;
     c.put(&cfg.pet.history)?;
+    c.put(&cfg.pet.goal_hist)?;
+    c.put(&[cfg.pet.flags, cfg.pet.outfit])?;
     c.put(&cfg.pet.born.to_le_bytes())?;
     c.put(&cfg.pet.seen.to_le_bytes())?;
     let body_len = c.pos;
@@ -288,6 +294,9 @@ mod tests {
             done_today: 0b0001_0011,
             checkin: 4,
             history: [0, 3, 4, 4, 5, 2, 4],
+            goal_hist: [0, 2, 5, 3, 6, 1, 4],
+            flags: 1,
+            outfit: 2,
             born: 1_789_000_000,
             seen: 1_789_100_000,
         };

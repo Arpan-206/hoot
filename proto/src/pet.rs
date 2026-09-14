@@ -39,6 +39,99 @@ pub const DISCOVERIES: [&str; 12] = [
     "a quiet, starry field",
 ];
 
+/// Things Hoot can wear. Each unlocks after so many adventures.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum Outfit {
+    #[default]
+    None = 0,
+    Scarf = 1,
+    Bow = 2,
+    PartyHat = 3,
+    Headphones = 4,
+    Crown = 5,
+}
+
+impl Outfit {
+    pub const ALL: [Outfit; 6] =
+        [Outfit::None, Outfit::Scarf, Outfit::Bow, Outfit::PartyHat, Outfit::Headphones, Outfit::Crown];
+
+    pub const fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Outfit::Scarf,
+            2 => Outfit::Bow,
+            3 => Outfit::PartyHat,
+            4 => Outfit::Headphones,
+            5 => Outfit::Crown,
+            _ => Outfit::None,
+        }
+    }
+
+    /// Adventures needed.
+    pub const fn unlock_at(self) -> u16 {
+        match self {
+            Outfit::None => 0,
+            Outfit::Scarf => 1,
+            Outfit::Bow => 3,
+            Outfit::PartyHat => 5,
+            Outfit::Headphones => 10,
+            Outfit::Crown => 15,
+        }
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Outfit::None => "nothing on",
+            Outfit::Scarf => "a scarf",
+            Outfit::Bow => "a bow",
+            Outfit::PartyHat => "a party hat",
+            Outfit::Headphones => "headphones",
+            Outfit::Crown => "a crown",
+        }
+    }
+}
+
+/// `Pet::flags` bits.
+pub const FLAG_INTRO_DONE: u8 = 1;
+
+/// One gentle line a day, by day number. All fit a 26-character line.
+pub const LINES: [&str; 21] = [
+    "You did enough today.",
+    "Small steps still count.",
+    "Drink some water, friend.",
+    "Rest is not a reward.",
+    "One thing at a time.",
+    "It's okay to go slow.",
+    "Proud of you for trying.",
+    "Stretch. I'll wait.",
+    "You are not behind.",
+    "Breathe. Then decide.",
+    "Look out of the window.",
+    "Be kind to you today.",
+    "A short walk helps.",
+    "Call someone you miss.",
+    "Good enough is good.",
+    "Today can be gentle.",
+    "You're doing fine.",
+    "Sit up. Sip. Continue.",
+    "The moon's out. Wind down.",
+    "Hoot believes in you.",
+    "Tomorrow is a new page.",
+];
+
+pub fn line_of_day(day: u16) -> &'static str {
+    LINES[day as usize % LINES.len()]
+}
+
+/// A greeting for the hour, short enough to add a question after.
+pub const fn greeting(hour: u8) -> &'static str {
+    match hour {
+        5..=11 => "Good morning!",
+        12..=17 => "Afternoon!",
+        _ => "Evening!",
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct Pet {
     /// Towards the next adventure, 0 to 100.
@@ -56,6 +149,12 @@ pub struct Pet {
     pub checkin: u8,
     /// The previous seven days' check-ins, newest last. 0 = none that day.
     pub history: [u8; 7],
+    /// Goals done on each of the previous seven days, newest last.
+    pub goal_hist: [u8; 7],
+    /// `FLAG_*` bits.
+    pub flags: u8,
+    /// What Hoot wears, as `Outfit as u8`.
+    pub outfit: u8,
     /// Local seconds since 1970 when Hoot hatched. 0 until a clock is known.
     pub born: u32,
     /// Local seconds at the last save. 0 = never.
@@ -117,9 +216,46 @@ impl Pet {
             done_today: 0,
             checkin: 0,
             history: [0; 7],
+            goal_hist: [0; 7],
+            flags: 0,
+            outfit: 0,
             born: 0,
             seen: 0,
         }
+    }
+
+    pub fn intro_done(&self) -> bool {
+        self.flags & FLAG_INTRO_DONE != 0
+    }
+
+    pub fn finish_intro(&mut self) {
+        self.flags |= FLAG_INTRO_DONE;
+    }
+
+    pub fn outfit(&self) -> Outfit {
+        Outfit::from_u8(self.outfit)
+    }
+
+    pub fn unlocked(&self, outfit: Outfit) -> bool {
+        self.adventures >= outfit.unlock_at()
+    }
+
+    /// The next outfit Hoot has earned, round and round. Returns it.
+    pub fn next_outfit(&mut self) -> Outfit {
+        let start = self.outfit as usize;
+        for step in 1..=Outfit::ALL.len() {
+            let candidate = Outfit::ALL[(start + step) % Outfit::ALL.len()];
+            if self.unlocked(candidate) {
+                self.outfit = candidate as u8;
+                return candidate;
+            }
+        }
+        Outfit::None
+    }
+
+    /// The first outfit still locked, if any, and what it needs.
+    pub fn next_locked(&self) -> Option<Outfit> {
+        Outfit::ALL.iter().copied().find(|o| !self.unlocked(*o))
     }
 
     /// The clock says it is `day`. On a new day, yesterday's check-in
@@ -131,6 +267,8 @@ impl Pet {
         if self.day != 0 {
             self.history.copy_within(1.., 0);
             self.history[6] = self.checkin;
+            self.goal_hist.copy_within(1.., 0);
+            self.goal_hist[6] = self.goals_today() as u8;
         }
         self.day = day;
         self.done_today = 0;
@@ -255,10 +393,12 @@ mod tests {
         assert!(p.done(GOAL_CHECKIN));
         assert_eq!(p.energy, ENERGY_PER_GOAL);
         assert!(!p.new_day(100), "same day: nothing happens");
+        p.complete(2);
         assert!(p.new_day(101));
         assert_eq!(p.history[6], 4);
+        assert_eq!(p.goal_hist[6], 2, "check-in and one goal");
         assert_eq!((p.checkin, p.done_today), (0, 0));
-        assert_eq!(p.energy, ENERGY_PER_GOAL, "energy carries over");
+        assert_eq!(p.energy, 2 * ENERGY_PER_GOAL, "energy carries over");
         assert!(!p.check_in(9));
     }
 
@@ -283,6 +423,34 @@ mod tests {
         p.adventures = 60;
         assert_eq!(p.stage(), Stage::Wise);
         assert!(Stage::Wise > Stage::Owl);
+    }
+
+    #[test]
+    fn outfits_unlock_with_adventures() {
+        let mut p = Pet::new();
+        assert_eq!(p.next_outfit(), Outfit::None, "nothing earned yet");
+        assert_eq!(p.next_locked(), Some(Outfit::Scarf));
+        p.adventures = 3;
+        assert_eq!(p.next_outfit(), Outfit::Scarf);
+        assert_eq!(p.next_outfit(), Outfit::Bow);
+        assert_eq!(p.next_outfit(), Outfit::None, "round it goes");
+        assert_eq!(p.next_locked(), Some(Outfit::PartyHat));
+        p.adventures = 99;
+        assert_eq!(p.next_locked(), None);
+        assert_eq!(Outfit::from_u8(5), Outfit::Crown);
+        assert_eq!(Outfit::from_u8(77), Outfit::None);
+    }
+
+    #[test]
+    fn intro_flag_and_lines() {
+        let mut p = Pet::new();
+        assert!(!p.intro_done());
+        p.finish_intro();
+        assert!(p.intro_done());
+        assert!(LINES.iter().all(|l| l.len() <= 26), "every line fits the screen");
+        assert_eq!(line_of_day(0), line_of_day(21));
+        assert_eq!(greeting(8), "Good morning!");
+        assert_eq!(greeting(23), "Evening!");
     }
 
     #[test]

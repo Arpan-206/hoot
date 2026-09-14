@@ -51,6 +51,8 @@ pub enum Sound {
     Siren,
     /// Urgent beeps, for the alarm.
     Alarm,
+    /// Two soft low notes: the owl itself.
+    Hoot,
 }
 
 /// The tones an alarm can use, by name.
@@ -90,6 +92,7 @@ impl Sound {
                 (1047, 500),
             ],
             Sound::Siren => &[(800, 180), (1100, 180), (800, 180), (1100, 180), (800, 180), (1100, 180)],
+            Sound::Hoot => &[(520, 170), (0, 90), (460, 280)],
             Sound::Alarm => &[
                 (2000, 80),
                 (0, 60),

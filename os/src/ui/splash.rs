@@ -4,7 +4,7 @@
 use hoot_gfx::{Framebuffer, HEIGHT, Rgb565, WIDTH};
 
 use crate::VERSION;
-use crate::ui::owl;
+use crate::ui::owl::{self, Look};
 use crate::ui::theme;
 
 const BRANCH: Rgb565 = Rgb565::hex(0x5C4632);
@@ -44,7 +44,7 @@ pub fn draw(fb: &mut Framebuffer) {
 
     let (x, y, scale) = owl_origin();
     let size = owl::SIZE * scale;
-    owl::draw(fb, x, y, scale, false, false);
+    owl::draw(fb, x, y, scale, Look::default());
     let branch_y = y + size - 2;
     fb.fill_rect(x - 18, branch_y, size + 36, 3, BRANCH);
     fb.fill_rect(x - 18, branch_y - 3, 4, 3, BRANCH);
