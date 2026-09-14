@@ -4,6 +4,7 @@
 //! with the newest sequence number and a valid CRC wins. No heap, no serde.
 
 use crate::crc32::crc32;
+use crate::pet::Pet;
 
 /// A string with a fixed capacity, stored inline. Never allocates.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -90,6 +91,8 @@ pub struct Config {
     pub alarm_min: u16,
     pub alarm_on: u8,
     pub alarm_tone: u8,
+    /// Hoot's care state.
+    pub pet: Pet,
 }
 
 pub const POWER_AUTO: u8 = 0;
@@ -106,10 +109,10 @@ const VERSION: u16 = 1;
 /// Encoded size in bytes: header, payload, CRC. Fields added later sit at
 /// the end of the payload; older, shorter records still decode and the
 /// missing fields take their defaults. Never reorder or remove a field.
-pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 4;
+pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 15 + 4;
 /// Bytes after `poll_secs`, added by later firmware one at a time.
 #[cfg(test)]
-const TRAILING_LEN: usize = 1 + 1 + 2 + 1 + 1;
+const TRAILING_LEN: usize = 1 + 1 + 2 + 1 + 1 + 15;
 const HEADER_LEN: usize = 12;
 const CRC_LEN: usize = 4;
 
@@ -192,6 +195,11 @@ pub fn encode(cfg: &Config, seq: u32, out: &mut [u8]) -> Option<usize> {
     c.put(&cfg.alarm_min.to_le_bytes())?;
     c.put(&[cfg.alarm_on])?;
     c.put(&[cfg.alarm_tone])?;
+    c.put(&[cfg.pet.hunger, cfg.pet.happy, cfg.pet.energy])?;
+    c.put(&cfg.pet.born.to_le_bytes())?;
+    c.put(&cfg.pet.seen.to_le_bytes())?;
+    c.put(&cfg.pet.fed.to_le_bytes())?;
+    c.put(&cfg.pet.played.to_le_bytes())?;
     let body_len = c.pos;
     let crc = crc32(&c.buf[..body_len]);
     c.put(&crc.to_le_bytes())?;
@@ -231,6 +239,12 @@ pub fn decode(buf: &[u8]) -> Option<(Config, u32)> {
         alarm_min: r.u16().unwrap_or(ALARM_DEFAULT_MIN),
         alarm_on: r.u8().unwrap_or(0),
         alarm_tone: r.u8().unwrap_or(0),
+        pet: match (r.u8(), r.u8(), r.u8(), r.u32(), r.u32(), r.u16(), r.u16()) {
+            (Some(hunger), Some(happy), Some(energy), Some(born), Some(seen), Some(fed), Some(played)) => {
+                Pet { hunger, happy, energy, born, seen, fed, played }
+            }
+            _ => Pet::new(),
+        },
     };
     Some((cfg, seq))
 }
@@ -253,6 +267,7 @@ mod tests {
         c.alarm_min = 6 * 60 + 30;
         c.alarm_on = 1;
         c.alarm_tone = 2;
+        c.pet = Pet { hunger: 33, happy: 61, energy: 90, born: 1_789_000_000, seen: 1_789_100_000, fed: 4, played: 2 };
         c
     }
 
@@ -282,6 +297,7 @@ mod tests {
         assert_eq!(cfg.sound, SOUND_DEFAULT, "missing field takes its default");
         assert_eq!(cfg.alarm_min, ALARM_DEFAULT_MIN);
         assert_eq!((cfg.alarm_on, cfg.alarm_tone), (0, 0));
+        assert_eq!(cfg.pet, Pet::new());
     }
 
     #[test]

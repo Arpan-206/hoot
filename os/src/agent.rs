@@ -147,18 +147,19 @@ impl Agent {
         }
     }
 
-    fn headers(&self, now: u32, app: &'static str, saver: bool) -> FixedStr<192> {
+    fn headers(&self, now: u32, app: &'static str, saver: bool) -> FixedStr<224> {
         let mut last = [0u8; 48];
         let n = crate::logging::latest(&mut last);
         let last = core::str::from_utf8(&last[..n]).unwrap_or("");
-        let text: StrBuf<192> = format(format_args!(
-            "X-Sprig-Version: {}\r\nX-Sprig-Uptime: {}\r\nX-Sprig-Module: {}\r\nX-Sprig-App: {}\r\nX-Sprig-Saver: {}\r\nX-Sprig-Fails: {}\r\nX-Sprig-Error: {}\r\n",
+        let text: StrBuf<224> = format(format_args!(
+            "X-Sprig-Version: {}\r\nX-Sprig-Uptime: {}\r\nX-Sprig-Module: {}\r\nX-Sprig-App: {}\r\nX-Sprig-Saver: {}\r\nX-Sprig-Fails: {}\r\nX-Sprig-Pet: {}\r\nX-Sprig-Error: {}\r\n",
             VERSION,
             now / 1000,
             self.module,
             app,
             if saver { "on" } else { "off" },
             self.fails,
+            crate::apps::hoot::mood().label(),
             last
         ));
         FixedStr::truncated(text.as_str())
@@ -225,6 +226,8 @@ impl Agent {
                 let _ = store.update_config(|c| c.frame_last_modified.clear());
             }
             "portal" => net.request_portal(),
+            "feed" => crate::apps::hoot::request(crate::apps::hoot::Care::Feed),
+            "play" => crate::apps::hoot::request(crate::apps::hoot::Care::Play),
             "update" => {
                 self.check_update = true;
                 self.next_ota_ms = now;

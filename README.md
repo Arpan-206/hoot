@@ -26,7 +26,8 @@ a 160x128 colour display, eight buttons, two white LEDs and a speaker.
 | USB and battery voltage readout | Done |
 | Home menu with grouped apps (Frame, Fun, Tools) | Done |
 | Speaker: I2S tones from PIO1 and DMA, volume setting | Done, verified on hardware |
-| Clock from the server heartbeat, daily alarm | Done, untested on hardware |
+| Clock from the server heartbeat, daily alarm | Done, verified on hardware |
+| Hoot the owl: needs, sleep, growth, remote care | Done, untested on hardware |
 | Slideshow of the last uploads, cached in flash | Done, untested on hardware |
 | Reboot to USB flash mode from the menu | Done |
 | Pico vs Pico W detection at boot | Done, verified on hardware |
@@ -134,7 +135,7 @@ submenus from that. A group with nothing usable on the board is hidden.
 
 | Menu | Entries |
 | --- | --- |
-| Top | Frame, Fun, Tools, About, Settings, Developer |
+| Top | Hoot, Frame, Fun, Tools, About, Settings, Developer |
 | Frame | Photo frame, Messages, Slideshow |
 | Fun | Fireplace, Aquarium, Sounds |
 | Tools | Pomodoro, Stopwatch, Clock, Alarm |
@@ -157,6 +158,7 @@ Messages also shows next to Frame on the top menu.
 | Photo frame | Hold L for 2 s | Forget the cached photo time and fetch again |
 | Messages | W/S, L, K | Move, mark the selected message seen, refresh |
 | Pomodoro | L, K | Start or pause, stop. W/S and A/D set the lengths while ready |
+| Hoot | L, K, D | Feed, play, stroke. Any of them wakes it |
 | Stopwatch | L, K | Start or stop. Lap while running, reset while stopped |
 | Clock | W/S, A/D, L | Hour, minute, zero the seconds. Sets the clock by hand |
 | Alarm | W/S, A/D, L, K | Hour, minute, on or off, next tone. While ringing: L stops, K snoozes 5 min |
@@ -247,6 +249,34 @@ The radio already sleeps between packets in every mode, and the display
 is only written when something changed, so the rest of the system idles
 by itself.
 
+## Hoot, the owl
+
+Hoot is the first entry of the menu and the screen the menu comes back to
+after a quiet minute. It is not an app in the usual sense: it runs in the
+background whatever is on screen, so it lives at the pace of the clock.
+
+Three needs go from 0 to 100: how full it is, how happy, how rested. They
+drift every ten minutes. Awake, it gets hungry and slowly bored. Asleep,
+it rests. It sleeps from 22:00 to 07:00 by the clock, or earlier when worn
+out, and any care wakes it for a minute. Starving makes it sad fast. It
+never dies; at worst it sulks until someone comes by.
+
+| Key | Care | Effect |
+| --- | --- | --- |
+| L | Feed | Hunger down 40, a little happier. Refused when full |
+| K | Play | Happier by 25, a bit tired and hungry. Refused when worn out |
+| D | Stroke | A little happier |
+
+It grows with age: owlet for three days, then owl, then wise owl after two
+weeks. Its state lives in the config record, saved after care and every
+ten minutes, and it catches up on the time it was off once the clock is
+known, up to a day.
+
+Family can feed it and play with it from the web page. Those are server
+commands, delivered with the heartbeat like the others, and the heartbeat
+carries its mood back, so the Device card says how Hoot is. The menu shows
+a word next to Hoot when it needs something.
+
 ## Clock and alarm
 
 The board has no clock chip. On a Pico W the server sends its time and the
@@ -265,8 +295,10 @@ snoozes for five minutes.
 ## Slideshow
 
 Every photo upload also goes into an album on the server, at frame size
-and without the caption. The server keeps the last eight. The Slideshow
-app lists them, fetches the newest six it does not yet have into blob
+and without the caption. The server keeps the last eight. The web page shows them in an Album
+card with a remove button each, and the photo form has an "album only"
+box for photos that should join the show without replacing the frame's
+picture. The Slideshow app lists them, fetches the newest six it does not yet have into blob
 slots 2 to 7, and cycles through them newest first. Photos survive
 reboots, so the show runs from flash when the network is down. The list is
 refreshed every five minutes.

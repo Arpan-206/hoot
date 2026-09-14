@@ -18,6 +18,7 @@ use crate::apps::aquarium::{self, Aquarium};
 use crate::apps::clock::{self, Clock};
 use crate::apps::display_test::{self, DisplayTest};
 use crate::apps::fireplace::{self, Fireplace};
+use crate::apps::hoot::{self, HootApp};
 use crate::apps::input_test::{self, InputTest};
 use crate::apps::leds::{self, Leds};
 #[cfg(feature = "wifi")]
@@ -46,9 +47,12 @@ const VISIBLE_ROWS: usize = ((theme::FOOTER_Y - theme::CONTENT_Y) / ROW_H) as us
 const MENU_MAX: usize = 12;
 /// How long a one-line notice such as "cache cleared" stays up.
 const NOTICE_MS: u32 = 1_200;
+/// Quiet time on the top menu before Hoot's screen comes back.
+const IDLE_TO_HOOT_MS: u32 = 60_000;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum AppId {
+    Hoot,
     About,
     Volume,
     InputTest,
@@ -151,6 +155,7 @@ const APPS: &[(Group, Entry)] = &[
 ];
 
 const MAIN: &[Entry] = &[
+    app(&hoot::INFO, AppId::Hoot),
     group(Group::Frame),
     group(Group::Fun),
     group(Group::Tools),
@@ -198,6 +203,9 @@ pub struct Shell {
     notice: Option<(&'static str, u32)>,
     /// True while the right LED is pulsing for unread messages.
     cue_on: bool,
+    /// Last frame with a key held, for the idle return to Hoot.
+    last_input_ms: u32,
+    hoot: HootApp,
     about: About,
     volume: Volume,
     input_test: InputTest,
@@ -235,6 +243,8 @@ impl Shell {
             pending_reset: None,
             notice: None,
             cue_on: false,
+            last_input_ms: 0,
+            hoot: HootApp::new(),
             about: About,
             volume: Volume::new(),
             input_test: InputTest::new(),
@@ -325,6 +335,7 @@ impl Shell {
 
     fn app(&mut self, id: AppId) -> &mut dyn App {
         match id {
+            AppId::Hoot => &mut self.hoot,
             AppId::About => &mut self.about,
             AppId::Volume => &mut self.volume,
             AppId::InputTest => &mut self.input_test,
@@ -384,13 +395,28 @@ impl Shell {
 
         self.message_cue(ctx);
 
-        // Timers keep time off screen.
-        for (_, entry) in APPS {
+        // Timers keep time off screen, and Hoot lives on.
+        let launchers = APPS.iter().map(|(_, e)| e).chain(MAIN.iter()).chain(SETTINGS.iter());
+        for entry in launchers {
             if let Action::Launch(id) = entry.action
                 && self.running != Some(id)
             {
                 self.app(id).background(ctx);
             }
+        }
+        // A quiet minute on the top menu goes back to Hoot.
+        if ctx.input.held_mask() != 0 {
+            self.last_input_ms = ctx.now_ms;
+        }
+        if self.running.is_none()
+            && self.current == Menu::Main
+            && self.notice.is_none()
+            && ctx.now_ms.wrapping_sub(self.last_input_ms) >= IDLE_TO_HOOT_MS
+        {
+            self.last_input_ms = ctx.now_ms;
+            info!("open app: Hoot (idle)");
+            self.running = Some(AppId::Hoot);
+            self.hoot.on_enter(ctx);
         }
         // A ringing alarm takes the screen from whatever is on it.
         if self.alarm.is_ringing() && self.running != Some(AppId::Alarm) {
@@ -542,6 +568,13 @@ impl Shell {
             }
             if is_menu {
                 fb.draw_text(WIDTH - 12, y, ">", theme::MUTED, None);
+            }
+            // Hoot's mood, when it needs something or sleeps.
+            if matches!(entry.action, Action::Launch(AppId::Hoot))
+                && let Some(word) = hoot::badge()
+            {
+                let color = if word == "zzz" { theme::MUTED } else { theme::WARN };
+                fb.draw_text_right(WIDTH - 6, y, word, color, None);
             }
             // Unread badge on Messages, and on the group that holds it, so
             // the count shows from the top menu too.

@@ -55,6 +55,7 @@ pub mod aquarium;
 pub mod clock;
 pub mod display_test;
 pub mod fireplace;
+pub mod hoot;
 pub mod input_test;
 pub mod leds;
 #[cfg(feature = "wifi")]

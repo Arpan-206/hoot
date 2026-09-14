@@ -5,6 +5,7 @@ pub mod qr;
 #[cfg(feature = "wifi")]
 pub mod setup;
 pub mod shell;
+pub mod owl;
 pub mod splash;
 pub mod text;
 pub mod theme;

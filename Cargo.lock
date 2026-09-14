@@ -918,7 +918,7 @@ dependencies = [
 
 [[package]]
 name = "hoot"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -948,7 +948,7 @@ dependencies = [
 
 [[package]]
 name = "hoot-boot"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -961,11 +961,11 @@ dependencies = [
 
 [[package]]
 name = "hoot-gfx"
-version = "0.2.2"
+version = "0.2.3"
 
 [[package]]
 name = "hoot-proto"
-version = "0.2.2"
+version = "0.2.3"
 
 [[package]]
 name = "ident_case"
