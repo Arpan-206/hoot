@@ -2,8 +2,8 @@
 //! 10 with a tick at each step, L plays the chime to judge it, J goes
 //! back and saves. The level lives in the config record as `sound`.
 
-use sprig_gfx::{Framebuffer, WIDTH};
-use sprig_proto::record::SOUND_MAX;
+use hoot_gfx::{Framebuffer, WIDTH};
+use hoot_proto::record::SOUND_MAX;
 
 use crate::apps::{App, AppInfo, Ctx, Group, Transition, back_pressed};
 use crate::audio::{self, Sound};

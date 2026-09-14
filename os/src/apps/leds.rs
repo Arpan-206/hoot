@@ -1,6 +1,6 @@
 //! Adjust the two white LEDs and the backlight.
 
-use sprig_gfx::Framebuffer;
+use hoot_gfx::Framebuffer;
 
 use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};
 use crate::drivers::input::Button;

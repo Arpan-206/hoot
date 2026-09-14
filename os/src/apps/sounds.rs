@@ -1,7 +1,7 @@
 //! Sounds: a board of the OS sounds on seven keys. Good for trying the
 //! speaker, and a little fun. J goes back.
 
-use sprig_gfx::{CELL_HEIGHT, Framebuffer};
+use hoot_gfx::{CELL_HEIGHT, Framebuffer};
 
 use crate::apps::{App, AppInfo, Ctx, Group, Transition, back_pressed};
 use crate::audio::{self, Sound};

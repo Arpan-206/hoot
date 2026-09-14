@@ -18,7 +18,7 @@ fn main() {
     println!("cargo:rerun-if-changed=secrets.toml");
 
     // secrets.toml is git-ignored. Each `key = "value"` line becomes
-    // SPRIG_<KEY> for `option_env!`. Missing file: no defaults baked in.
+    // HOOT_<KEY> for `option_env!`. Missing file: no defaults baked in.
     if let Ok(text) = fs::read_to_string("secrets.toml") {
         for line in text.lines() {
             let line = line.trim();
@@ -29,7 +29,7 @@ fn main() {
             let key = key.trim().to_ascii_uppercase();
             let value = value.trim().trim_matches('"');
             if key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-                println!("cargo:rustc-env=SPRIG_{key}={value}");
+                println!("cargo:rustc-env=HOOT_{key}={value}");
             }
         }
     }

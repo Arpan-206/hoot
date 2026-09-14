@@ -1,7 +1,7 @@
 //! Fireplace: the classic "Doom fire" on a 2x2 pixel grid. Ambient, cheap
 //! and warm. W and S turn the heat up and down.
 
-use sprig_gfx::{Framebuffer, HEIGHT, Rgb565, WIDTH};
+use hoot_gfx::{Framebuffer, HEIGHT, Rgb565, WIDTH};
 
 use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};
 use crate::drivers::input::Button;

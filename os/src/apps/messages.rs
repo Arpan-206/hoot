@@ -5,8 +5,8 @@
 //! as a double tick. The agent's heartbeat keeps the unread count; the
 //! menu shows it as a badge.
 
-use sprig_gfx::{CELL_HEIGHT, CELL_WIDTH, Framebuffer, WIDTH};
-use sprig_proto::messages::{self, age_label};
+use hoot_gfx::{CELL_HEIGHT, CELL_WIDTH, Framebuffer, WIDTH};
+use hoot_proto::messages::{self, age_label};
 
 use crate::agent;
 use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};

@@ -5,8 +5,8 @@
 //! minutes. It needs the clock: from the server on a Pico W, or set by
 //! hand in the Clock app.
 
-use sprig_gfx::{Framebuffer, WIDTH};
-use sprig_proto::time::{civil_from_secs, days_from_secs};
+use hoot_gfx::{Framebuffer, WIDTH};
+use hoot_proto::time::{civil_from_secs, days_from_secs};
 
 use crate::apps::{App, AppInfo, Ctx, Group, Transition, back_pressed};
 use crate::audio::{self, Sound, TUNES};

@@ -4,7 +4,7 @@
 use embassy_net::Stack;
 use embassy_net::udp::{PacketMetadata, UdpSocket};
 use embassy_time::Timer;
-use sprig_proto::dns;
+use hoot_proto::dns;
 
 use super::PORTAL_IP;
 

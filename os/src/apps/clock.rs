@@ -2,8 +2,8 @@
 //! server sets it with every heartbeat. W/S move the hour and A/D the
 //! minute by hand, which any board can use; L zeroes the seconds.
 
-use sprig_gfx::Framebuffer;
-use sprig_proto::time::Civil;
+use hoot_gfx::Framebuffer;
+use hoot_proto::time::Civil;
 
 use crate::apps::{App, AppInfo, Ctx, Group, Transition, back_pressed};
 use crate::clock::{self, Source};

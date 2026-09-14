@@ -17,7 +17,7 @@ use crate::apps::photo_frame;
 use crate::clock::{self, Source};
 use crate::net::{Body, FetchRequest, FetchResult, FixedStr, JobState, Lane, NetHandle, Sink};
 use crate::storage::{Config, Storage};
-use sprig_proto::record::{POWER_AUTO, POWER_NORMAL, POWER_SAVER};
+use hoot_proto::record::{POWER_AUTO, POWER_NORMAL, POWER_SAVER};
 use crate::ui::text::{StrBuf, format};
 
 const FIRST_POLL_MS: u32 = 5_000;
@@ -187,7 +187,7 @@ impl Agent {
     }
 
     fn start_firmware(&mut self, net: &mut NetHandle, store: &Storage) {
-        let request = FetchRequest::get(url(store.config(), "/firmware/sprig-os.bin", false), Sink::Firmware);
+        let request = FetchRequest::get(url(store.config(), "/firmware/hoot.bin", false), Sink::Firmware);
         info!("ota: downloading {}", request.url.as_str());
         self.start(net, Job::Firmware, request);
     }

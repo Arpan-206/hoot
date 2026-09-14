@@ -2,7 +2,7 @@
 //! Sounds setting says, plus the normal chime. If the sweep is silent the
 //! fault is in the amplifier or the speaker, not in the level.
 
-use sprig_gfx::{CELL_HEIGHT, Framebuffer};
+use hoot_gfx::{CELL_HEIGHT, Framebuffer};
 use crate::ui::text::{StrBuf, format};
 
 use crate::apps::{App, AppInfo, Ctx, Group, Transition, back_pressed};

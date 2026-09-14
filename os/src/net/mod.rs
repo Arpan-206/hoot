@@ -35,12 +35,12 @@ use embassy_sync::blocking_mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 
-pub use sprig_proto::record::FixedStr;
+pub use hoot_proto::record::FixedStr;
 
 use crate::storage::Config;
 
 /// Name of the open setup hotspot.
-pub const PORTAL_SSID: &str = "Sprig-Setup";
+pub const PORTAL_SSID: &str = "Hoot-Setup";
 /// The Sprig's address while the hotspot is up.
 pub const PORTAL_IP: [u8; 4] = [192, 168, 4, 1];
 

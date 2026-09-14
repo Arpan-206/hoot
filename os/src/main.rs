@@ -1,4 +1,4 @@
-//! Sprig OS: a small operating system for the Hack Club Sprig.
+//! Hoot: a small operating system for the Hack Club Sprig.
 //!
 //! Built on the Embassy async runtime. Boot order: clocks, module detection,
 //! flash storage, PWM, buttons, display, power monitor, radio (Pico W with
@@ -38,7 +38,7 @@ use embassy_rp::usb;
 use embassy_rp::watchdog::Watchdog;
 use embassy_sync::blocking_mutex::Mutex;
 use embassy_time::{Delay, Duration, Instant, Ticker, Timer, with_timeout};
-use sprig_gfx::Framebuffer;
+use hoot_gfx::Framebuffer;
 use static_cell::{ConstStaticCell, StaticCell};
 
 use crate::apps::Ctx;
@@ -80,8 +80,8 @@ const DIM_MIN: u8 = 8;
 /// Battery saver decision from the stored mode and the power reading.
 fn saver_active(mode: u8, power: &PowerStatus) -> bool {
     match mode {
-        sprig_proto::record::POWER_SAVER => true,
-        sprig_proto::record::POWER_NORMAL => false,
+        hoot_proto::record::POWER_SAVER => true,
+        hoot_proto::record::POWER_NORMAL => false,
         _ => power.usb_known && !power.usb,
     }
 }
@@ -139,13 +139,13 @@ async fn push_frame(display: &mut Display, fb: &Framebuffer, dma_ok: &mut bool) 
 /// from `os/secrets.toml` at build time, see `build.rs`.
 fn default_config() -> Config {
     let mut c = Config::default();
-    c.wifi_ssid.set(option_env!("SPRIG_WIFI_SSID").unwrap_or(""));
-    c.wifi_password.set(option_env!("SPRIG_WIFI_PASSWORD").unwrap_or(""));
-    c.frame_server.set(option_env!("SPRIG_FRAME_SERVER").unwrap_or("http://192.168.1.9:8000"));
-    c.frame_name.set(option_env!("SPRIG_FRAME_NAME").unwrap_or("arpan"));
+    c.wifi_ssid.set(option_env!("HOOT_WIFI_SSID").unwrap_or(""));
+    c.wifi_password.set(option_env!("HOOT_WIFI_PASSWORD").unwrap_or(""));
+    c.frame_server.set(option_env!("HOOT_FRAME_SERVER").unwrap_or("http://192.168.1.9:8000"));
+    c.frame_name.set(option_env!("HOOT_FRAME_NAME").unwrap_or("arpan"));
     c.poll_secs = 15;
-    c.sound = sprig_proto::record::SOUND_DEFAULT;
-    c.alarm_min = sprig_proto::record::ALARM_DEFAULT_MIN;
+    c.sound = hoot_proto::record::SOUND_DEFAULT;
+    c.alarm_min = hoot_proto::record::ALARM_DEFAULT_MIN;
     c
 }
 
@@ -160,7 +160,7 @@ async fn usb_logger(driver: usb::Driver<'static, USB>) {
 async fn main(spawner: Spawner) {
     let mut p = embassy_rp::init(Default::default());
     spawner.spawn(usb_logger(usb::Driver::new(p.USB, Irqs)).unwrap());
-    info!("Sprig OS {} booting", VERSION);
+    info!("Hoot {} booting", VERSION);
 
     // Display first, so that a panic anywhere later in boot can be read on
     // screen. ST7735 on SPI0, write-only, SPI mode 0, frames sent by DMA.

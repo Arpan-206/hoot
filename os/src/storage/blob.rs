@@ -1,6 +1,6 @@
 //! Blob slots: 64 KiB records with a header sector written last.
 
-use sprig_proto::crc32::Crc32;
+use hoot_proto::crc32::Crc32;
 
 use super::{FlashMutex, StorageError, xip};
 use crate::board::FLASH_SECTOR;

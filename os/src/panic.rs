@@ -11,7 +11,7 @@ use core::ptr::{null_mut, read_volatile, write_volatile};
 use core::sync::atomic::{AtomicPtr, Ordering};
 
 use cortex_m_rt::{ExceptionFrame, exception};
-use sprig_gfx::{CELL_HEIGHT, CELL_WIDTH, Framebuffer, HEIGHT, Rgb565, WIDTH};
+use hoot_gfx::{CELL_HEIGHT, CELL_WIDTH, Framebuffer, HEIGHT, Rgb565, WIDTH};
 
 use crate::board::pins::{BTN_L, LED_LEFT, LED_RIGHT, TFT_BACKLIGHT};
 use crate::hw::Display;

@@ -1,6 +1,6 @@
 //! Test patterns for checking orientation, colour order and panel edges.
 
-use sprig_gfx::{Framebuffer, HEIGHT, Rgb565, WIDTH};
+use hoot_gfx::{Framebuffer, HEIGHT, Rgb565, WIDTH};
 
 use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};
 use crate::drivers::input::Button;

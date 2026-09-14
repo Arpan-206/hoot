@@ -1,12 +1,12 @@
 [package]
-name = "sprig-os"
+name = "hoot"
 version.workspace = true
 edition = "2024"
 license.workspace = true
 description = "A small custom operating system for the Hack Club Sprig (RP2040)."
 
 [[bin]]
-name = "sprig-os"
+name = "hoot"
 test = false
 bench = false
 
@@ -32,8 +32,8 @@ embedded-storage = "0.3.1"
 log = "0.4.34"
 portable-atomic = { version = "1.15.0", features = ["critical-section"] }
 qrcodegen-no-heap = { version = "1.8.1", optional = true }
-sprig-gfx = { path = "../gfx" }
-sprig-proto = { path = "../proto" }
+hoot-gfx = { path = "../gfx" }
+hoot-proto = { path = "../proto" }
 static_cell = "2.1.1"
 
 [features]

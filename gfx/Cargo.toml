@@ -1,9 +1,9 @@
 [package]
-name = "sprig-gfx"
+name = "hoot-gfx"
 version.workspace = true
 edition = "2024"
 license.workspace = true
-description = "Framebuffer, colours and bitmap font for Sprig OS. No hardware dependencies."
+description = "Framebuffer, colours and bitmap font for Hoot. No hardware dependencies."
 
 [lib]
 bench = false

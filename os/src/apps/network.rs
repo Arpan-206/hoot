@@ -1,6 +1,6 @@
 //! Radio and network status, with a button to connect.
 
-use sprig_gfx::{CELL_HEIGHT, Framebuffer, Rgb565};
+use hoot_gfx::{CELL_HEIGHT, Framebuffer, Rgb565};
 
 use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};
 use crate::drivers::input::Button;

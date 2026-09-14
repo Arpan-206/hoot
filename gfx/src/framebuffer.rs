@@ -154,6 +154,21 @@ impl Framebuffer {
         }
     }
 
+    /// Draw a 1-bit bitmap with every pixel as a `scale` by `scale` block.
+    /// Same row layout as `draw_bitmap`. For logos and sprites.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_bitmap_scaled(&mut self, x: i32, y: i32, w: i32, h: i32, rows: &[u8], color: Rgb565, scale: i32) {
+        let stride = ((w + 7) / 8) as usize;
+        for row in 0..h {
+            let Some(bytes) = rows.get(row as usize * stride..(row as usize + 1) * stride) else { return };
+            for col in 0..w {
+                if bytes[(col / 8) as usize] & (0x80 >> (col % 8)) != 0 {
+                    self.fill_rect(x + col * scale, y + row * scale, scale, scale, color);
+                }
+            }
+        }
+    }
+
     /// Draw one character at integer `scale`. Returns the horizontal advance.
     ///
     /// `bg` paints the whole 6x8 cell first; `None` leaves the background as is.
@@ -246,6 +261,21 @@ pub fn text_width(text: &str, scale: i32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scaled_bitmap_fills_blocks() {
+        let mut fb = Framebuffer::new();
+        fb.clear(Rgb565::hex(0x000000));
+        // 2x2 bitmap with the diagonal set, drawn at 3x.
+        fb.draw_bitmap_scaled(10, 10, 2, 2, &[0b1000_0000, 0b0100_0000], Rgb565::hex(0xFFFFFF), 3);
+        let white = Rgb565::hex(0xFFFFFF);
+        assert_eq!(fb.get(10, 10), Some(white));
+        assert_eq!(fb.get(12, 12), Some(white));
+        assert_eq!(fb.get(13, 13), Some(white));
+        assert_eq!(fb.get(15, 15), Some(white));
+        assert_eq!(fb.get(13, 10), Some(Rgb565::hex(0x000000)));
+        assert_eq!(fb.get(10, 13), Some(Rgb565::hex(0x000000)));
+    }
 
     fn fb() -> Box<Framebuffer> {
         Box::new(Framebuffer::new())
@@ -382,7 +412,7 @@ mod tests {
     fn font_sheet() {
         let mut fb = fb();
         let rows = [
-            "Sprig OS 0.1.0 !\"#$%&'()*+",
+            "Hoot 0.1.0 !\"#$%&'()*+",
             ",-./0123456789:;<=>?@",
             "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
             "[\\]^_`{|}~",

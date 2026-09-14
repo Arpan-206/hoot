@@ -4,7 +4,7 @@ members = ["os", "gfx", "proto", "boot"]
 default-members = ["os"]
 
 [workspace.package]
-version = "0.1.13"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 

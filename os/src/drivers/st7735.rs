@@ -6,7 +6,7 @@
 use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
 use embedded_hal::spi::SpiBus;
-use sprig_gfx::{BYTES, HEIGHT, WIDTH};
+use hoot_gfx::{BYTES, HEIGHT, WIDTH};
 
 use crate::board::TFT_MADCTL;
 

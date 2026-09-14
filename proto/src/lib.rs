@@ -1,4 +1,4 @@
-//! Protocol helpers for Sprig OS.
+//! Protocol helpers for Hoot.
 //!
 //! Everything here is plain data processing with no hardware and no heap,
 //! so it runs on the RP2040 and in host unit tests (`cargo host-test`).

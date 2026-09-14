@@ -917,6 +917,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "hoot"
+version = "0.2.0"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "cyw43",
+ "cyw43-pio",
+ "embassy-boot-rp",
+ "embassy-embedded-hal",
+ "embassy-executor",
+ "embassy-futures",
+ "embassy-net",
+ "embassy-rp",
+ "embassy-sync",
+ "embassy-time",
+ "embassy-usb",
+ "embassy-usb-logger",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "embedded-io-async 0.7.0",
+ "embedded-storage",
+ "hoot-gfx",
+ "hoot-proto",
+ "log",
+ "portable-atomic",
+ "qrcodegen-no-heap",
+ "static_cell",
+]
+
+[[package]]
+name = "hoot-boot"
+version = "0.2.0"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "embassy-boot-rp",
+ "embassy-rp",
+ "embassy-sync",
+ "embassy-time",
+ "embedded-storage",
+]
+
+[[package]]
+name = "hoot-gfx"
+version = "0.2.0"
+
+[[package]]
+name = "hoot-proto"
+version = "0.2.0"
+
+[[package]]
 name = "ident_case"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1518,57 +1569,6 @@ dependencies = [
  "heapless 0.9.3",
  "managed",
 ]
-
-[[package]]
-name = "sprig-boot"
-version = "0.1.13"
-dependencies = [
- "cortex-m",
- "cortex-m-rt",
- "embassy-boot-rp",
- "embassy-rp",
- "embassy-sync",
- "embassy-time",
- "embedded-storage",
-]
-
-[[package]]
-name = "sprig-gfx"
-version = "0.1.13"
-
-[[package]]
-name = "sprig-os"
-version = "0.1.13"
-dependencies = [
- "cortex-m",
- "cortex-m-rt",
- "cyw43",
- "cyw43-pio",
- "embassy-boot-rp",
- "embassy-embedded-hal",
- "embassy-executor",
- "embassy-futures",
- "embassy-net",
- "embassy-rp",
- "embassy-sync",
- "embassy-time",
- "embassy-usb",
- "embassy-usb-logger",
- "embedded-hal 1.0.0",
- "embedded-hal-async",
- "embedded-io-async 0.7.0",
- "embedded-storage",
- "log",
- "portable-atomic",
- "qrcodegen-no-heap",
- "sprig-gfx",
- "sprig-proto",
- "static_cell",
-]
-
-[[package]]
-name = "sprig-proto"
-version = "0.1.13"
 
 [[package]]
 name = "ssmarshal"

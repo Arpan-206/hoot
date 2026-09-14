@@ -7,8 +7,8 @@
 //! is refreshed every few minutes and missing photos fetched one at a
 //! time. A/D step by hand, W/S change the dwell time.
 
-use sprig_gfx::{BYTES, CELL_HEIGHT, Framebuffer, Rgb565, WIDTH};
-use sprig_proto::album;
+use hoot_gfx::{BYTES, CELL_HEIGHT, Framebuffer, Rgb565, WIDTH};
+use hoot_proto::album;
 
 use crate::apps::{App, AppInfo, Ctx, Group, Transition, back_pressed};
 use crate::drivers::input::Button;

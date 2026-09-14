@@ -1,7 +1,7 @@
 //! Shows all eight buttons in their physical layout and lights them when held.
 //! Hold J for one second to leave, so J itself can be tested too.
 
-use sprig_gfx::Framebuffer;
+use hoot_gfx::Framebuffer;
 
 use crate::apps::{App, AppInfo, Group, Ctx, Transition};
 use crate::drivers::input::Button;

@@ -5,7 +5,7 @@
 //! Clock app. It is lost at power-off.
 
 use portable_atomic::{AtomicU8, AtomicU32, Ordering};
-use sprig_proto::time::{Civil, civil_from_secs};
+use hoot_proto::time::{Civil, civil_from_secs};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(u8)]

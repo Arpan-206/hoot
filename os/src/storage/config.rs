@@ -1,6 +1,6 @@
 //! Two-sector config store. See the module docs in `storage`.
 
-use sprig_proto::record::{self, Config, RECORD_LEN};
+use hoot_proto::record::{self, Config, RECORD_LEN};
 
 use super::{FlashMutex, StorageError, xip};
 use crate::board::FLASH_SECTOR;

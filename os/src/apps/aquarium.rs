@@ -1,6 +1,6 @@
 //! Aquarium: fish, bubbles and weed, drifting. Ambient. Nothing to do.
 
-use sprig_gfx::{Framebuffer, HEIGHT, Rgb565, WIDTH};
+use hoot_gfx::{Framebuffer, HEIGHT, Rgb565, WIDTH};
 
 use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};
 

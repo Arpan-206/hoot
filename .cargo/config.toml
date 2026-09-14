@@ -16,8 +16,8 @@ rustflags = [
 
 [alias]
 # Pico W builds: same firmware plus the Wi-Fi stack.
-build-w = "build --release -p sprig-os --features wifi"
-run-w = "run --release -p sprig-os --features wifi"
+build-w = "build --release -p hoot --features wifi"
+run-w = "run --release -p hoot --features wifi"
 # Host-side unit tests for the hardware-free crates.
 # Change the target triple if you are not on Apple Silicon.
-host-test = "test -p sprig-gfx -p sprig-proto --target aarch64-apple-darwin"
+host-test = "test -p hoot-gfx -p hoot-proto --target aarch64-apple-darwin"

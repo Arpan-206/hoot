@@ -1,6 +1,6 @@
 //! Version, module, Wi-Fi, uptime, power and frame-time readout.
 
-use sprig_gfx::{CELL_HEIGHT, Framebuffer, Rgb565};
+use hoot_gfx::{CELL_HEIGHT, Framebuffer, Rgb565};
 
 use crate::VERSION;
 use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};
@@ -46,8 +46,8 @@ impl App for About {
             "{} ({})",
             if ctx.saver { "on" } else { "off" },
             match ctx.store.config().power_mode {
-                sprig_proto::record::POWER_SAVER => "manual",
-                sprig_proto::record::POWER_NORMAL => "manual",
+                hoot_proto::record::POWER_SAVER => "manual",
+                hoot_proto::record::POWER_NORMAL => "manual",
                 _ => "auto",
             }
         ));

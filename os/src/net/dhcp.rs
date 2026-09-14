@@ -4,7 +4,7 @@
 use embassy_net::udp::{PacketMetadata, UdpSocket};
 use embassy_net::{IpAddress, IpEndpoint, Stack};
 use embassy_time::Timer;
-use sprig_proto::dhcp::{self, REPLY_MAX};
+use hoot_proto::dhcp::{self, REPLY_MAX};
 
 use super::PORTAL_IP;
 

@@ -21,7 +21,7 @@ mod config;
 pub use blob::BlobHeader;
 #[cfg(feature = "wifi")]
 pub use blob::{BLOB_DATA_MAX, BlobWriter};
-pub use sprig_proto::record::Config;
+pub use hoot_proto::record::Config;
 
 use core::cell::RefCell;
 

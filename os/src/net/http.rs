@@ -7,8 +7,8 @@ use embassy_net::tcp::TcpSocket;
 use embassy_net::{IpAddress, IpEndpoint, Ipv4Address, Stack};
 use embassy_time::{Duration, with_timeout};
 use embedded_io_async::Write;
-use sprig_proto::record::FixedStr;
-use sprig_proto::{http, url};
+use hoot_proto::record::FixedStr;
+use hoot_proto::{http, url};
 
 use super::{Body, FetchError, FetchRequest, FetchResult, SMALL_BODY_MAX, Sink};
 use crate::ota;

@@ -1,6 +1,6 @@
 //! Colours and layout helpers shared by every screen.
 
-use sprig_gfx::{CELL_HEIGHT, Framebuffer, HEIGHT, Rgb565, WIDTH};
+use hoot_gfx::{CELL_HEIGHT, Framebuffer, HEIGHT, Rgb565, WIDTH};
 
 use crate::net::NetState;
 

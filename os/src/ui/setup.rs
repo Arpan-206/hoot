@@ -1,12 +1,12 @@
 //! The Wi-Fi setup screen: instructions and a QR code that joins the hotspot.
 
-use sprig_gfx::{CELL_HEIGHT, Framebuffer};
+use hoot_gfx::{CELL_HEIGHT, Framebuffer};
 
 use crate::net::PORTAL_SSID;
 use crate::ui::{qr, theme};
 
 /// Scanning this joins the open hotspot on iOS and Android.
-const WIFI_QR: &str = "WIFI:T:nopass;S:Sprig-Setup;;";
+const WIFI_QR: &str = "WIFI:T:nopass;S:Hoot-Setup;;";
 
 pub fn draw(fb: &mut Framebuffer) {
     theme::screen(fb, "Wi-Fi setup", "");

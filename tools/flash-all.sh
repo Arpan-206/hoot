@@ -9,19 +9,19 @@ cd "$(dirname "$0")/.."
 VARIANT="${1:-wifi}"
 
 echo "-- boot loader"
-cargo build --release -p sprig-boot
-picotool load -v target/thumbv6m-none-eabi/release/sprig-boot -t elf
+cargo build --release -p hoot-boot
+picotool load -v target/thumbv6m-none-eabi/release/hoot-boot -t elf
 
 if [ "$VARIANT" = "wifi" ]; then
   echo "-- radio firmware partition"
   python3 tools/mkradio.py target/radio.bin
   picotool load -v target/radio.bin -t bin -o 0x10148000
-  echo "-- Sprig OS (wifi)"
-  cargo build --release -p sprig-os --features wifi
+  echo "-- Hoot (wifi)"
+  cargo build --release -p hoot --features wifi
 else
-  echo "-- Sprig OS (plain)"
-  cargo build --release -p sprig-os
+  echo "-- Hoot (plain)"
+  cargo build --release -p hoot
 fi
-picotool load -v target/thumbv6m-none-eabi/release/sprig-os -t elf
+picotool load -v target/thumbv6m-none-eabi/release/hoot -t elf
 picotool reboot
-echo "done: the Sprig is rebooting into Sprig OS"
+echo "done: the Sprig is rebooting into Hoot"

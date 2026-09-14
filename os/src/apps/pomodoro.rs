@@ -7,7 +7,7 @@
 //! seconds. The speaker plays a rising chime when a work session is done
 //! and a falling one when the break is over.
 
-use sprig_gfx::{CELL_HEIGHT, Framebuffer, WIDTH};
+use hoot_gfx::{CELL_HEIGHT, Framebuffer, WIDTH};
 
 use crate::apps::{App, AppInfo, Ctx, Group, Transition, back_pressed};
 use crate::audio::{self, Sound};

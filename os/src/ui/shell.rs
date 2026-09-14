@@ -9,8 +9,8 @@
 //! network, battery saver, cache and reboot actions. Developer holds the
 //! hardware test screens. J goes back, as in the apps.
 
-use sprig_gfx::{CELL_HEIGHT, WIDTH};
-use sprig_proto::record::{POWER_AUTO, POWER_NORMAL, POWER_SAVER};
+use hoot_gfx::{CELL_HEIGHT, WIDTH};
+use hoot_proto::record::{POWER_AUTO, POWER_NORMAL, POWER_SAVER};
 
 use crate::apps::about::{self, About};
 use crate::apps::alarm::{self, Alarm};
@@ -83,7 +83,7 @@ enum Menu {
 impl Menu {
     const fn title(self) -> &'static str {
         match self {
-            Menu::Main => "Sprig OS",
+            Menu::Main => "Hoot",
             Menu::Group(g) => g.title(),
             Menu::Settings => "Settings",
         }

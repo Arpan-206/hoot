@@ -1,4 +1,4 @@
-//! Sprig OS boot loader.
+//! Hoot boot loader.
 //!
 //! Runs first, before the OS. If the OS wrote a new image into the update
 //! partition and marked it, this swaps it into the active partition and

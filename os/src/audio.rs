@@ -19,7 +19,7 @@ use embassy_rp::pio_programs::i2s::{PioI2sOut, PioI2sOutProgram};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 use portable_atomic::{AtomicU8, Ordering};
-use sprig_proto::record::{SOUND_MAX, SOUND_OFF};
+use hoot_proto::record::{SOUND_MAX, SOUND_OFF};
 
 use crate::hw::Irqs;
 

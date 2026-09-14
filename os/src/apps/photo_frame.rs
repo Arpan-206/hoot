@@ -15,7 +15,7 @@
 //! over it. Trouble shows on the left LED instead: two pulses when a working
 //! network is lost, three when the server cannot be reached.
 
-use sprig_gfx::{BYTES, CELL_HEIGHT, Framebuffer, Rgb565};
+use hoot_gfx::{BYTES, CELL_HEIGHT, Framebuffer, Rgb565};
 
 use crate::apps::{App, AppInfo, Group, Ctx, Transition, back_pressed};
 use crate::drivers::dimmer::Dimmer;

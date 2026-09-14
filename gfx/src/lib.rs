@@ -1,4 +1,4 @@
-//! Graphics primitives for Sprig OS.
+//! Graphics primitives for Hoot.
 //!
 //! This crate has no hardware dependencies. It compiles for the RP2040 and
 //! for the host, so all drawing code can be unit-tested with `cargo host-test`.

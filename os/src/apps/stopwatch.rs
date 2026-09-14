@@ -1,7 +1,7 @@
 //! Stopwatch: start, stop, laps. Time comes from the frame clock, so it
 //! keeps counting while another screen is up. Every press gives a tick.
 
-use sprig_gfx::{CELL_HEIGHT, Framebuffer, WIDTH};
+use hoot_gfx::{CELL_HEIGHT, Framebuffer, WIDTH};
 
 use crate::apps::{App, AppInfo, Ctx, Group, Transition, back_pressed};
 use crate::audio::{self, Sound};

@@ -1,8 +1,14 @@
-# Sprig OS
+# Hoot
 
 A small operating system for the Hack Club Sprig, written in Rust on the
 Embassy async runtime. It replaces the stock Spade firmware. It shares no
 code with it.
+
+Hoot is named for the owl on the splash screen. It is the mascot now and
+the digital pet later: it will live in the background, sleep at night,
+hoot the alarm, and get excited when a note arrives. Only the hardware is
+still called a Sprig, so pins, the board and the `X-Sprig-*` heartbeat
+headers keep that name.
 
 The Sprig is a handheld game console. It has a Raspberry Pi Pico (RP2040),
 a 160x128 colour display, eight buttons, two white LEDs and a speaker.
@@ -54,7 +60,7 @@ All numbers are RP2040 GPIO numbers. They come from the stock firmware.
 | USB power detect | 24 | High on USB. Plain Pico only |
 | VSYS sense | 29 | ADC 3, reads VSYS / 3 |
 
-Some Pico pins mean something else on a Pico W. Sprig OS checks which
+Some Pico pins mean something else on a Pico W. Hoot checks which
 module it runs on at boot and adapts.
 
 | GPIO | Plain Pico | Pico W |
@@ -166,7 +172,7 @@ Messages also shows next to Frame on the top menu.
 
 ## First boot checklist
 
-1. The splash shows "Sprig OS" the right way up. If it is upside down,
+1. The splash shows "Hoot" the right way up. If it is upside down,
    change `TFT_MADCTL` in `os/src/board.rs`.
 2. In "Display test" the bar marked R is red and B is blue. If they are
    swapped, add `MADCTL_BGR` to `TFT_MADCTL`.
@@ -182,7 +188,8 @@ Frames update themselves from the photo server, like the ESP32 frame.
 1. Bump `version` under `[workspace.package]` in `Cargo.toml`.
 2. Run `tools/release.sh ~/Code/Hardware/frame-server`. It builds the
    Wi-Fi OS, extracts the flat image with `tools/mkbin.py`, and writes
-   `firmware/sprig-os.bin` and `firmware/version.txt` in the server folder.
+   `firmware/hoot.bin` and `firmware/version.txt` in the server folder.
+   It also writes `firmware/sprig-os.bin`, the name devices on 0.1.x look for.
 3. Each Sprig checks `/firmware/version.txt` a minute after boot and
    every six hours after that, whatever is on screen. If the published
    version differs from its own, it streams the image into the update
@@ -293,7 +300,7 @@ The Sprig sets itself up the way the ESP32 frame does, without a rebuild.
 1. The setup hotspot opens by itself when no network is saved, when the
    saved network refuses three joins in a row, or when you press K in the
    Network app under Settings. The screen shows a QR code and three steps.
-2. Scan the code with a phone, or join the open Wi-Fi `Sprig-Setup`.
+2. Scan the code with a phone, or join the open Wi-Fi `Hoot-Setup`.
 3. A page opens by itself. If it does not, open `http://192.168.4.1`.
 4. Pick your network from the list, type the password, check the photo
    server and frame name, tap Save.
@@ -354,8 +361,8 @@ there reboots into USB flash mode.
 
 | Path | Contents |
 | --- | --- |
-| `gfx/` | `sprig-gfx`: framebuffer, RGB565 colour, 5x7 font. No hardware code. |
-| `proto/` | `sprig-proto`: URL, HTTP, form, DHCP and DNS codecs, CRC-32, config record. No hardware code. |
+| `gfx/` | `hoot-gfx`: framebuffer, RGB565 colour, 5x7 font. No hardware code. |
+| `proto/` | `hoot-proto`: URL, HTTP, form, DHCP and DNS codecs, CRC-32, config record. No hardware code. |
 | `os/src/main.rs` | Boot sequence and the shell task (the frame loop) |
 | `os/src/board.rs` | Pin map and display constants |
 | `os/src/drivers/` | ST7735, buttons, PWM dimmer, power monitor, module detection |
@@ -363,7 +370,7 @@ there reboots into USB flash mode.
 | `os/src/net/` | Network handle for apps, HTTP client, Wi-Fi task, setup portal with DHCP and DNS servers |
 | `os/src/ota.rs` | Firmware updater: streams images into the update partition, confirms boots |
 | `os/src/agent.rs` | OS agent: heartbeat, warnings, server commands, update check |
-| `boot/` | `sprig-boot`: the boot loader |
+| `boot/` | `hoot-boot`: the boot loader |
 | `os/src/ui/` | Theme, text formatting, splash, shell |
 | `os/src/apps/` | The `App` trait, the app template, and the built-in apps |
 | `os/firmware/cyw43/` | Radio firmware blobs (Infineon permissive binary license) |

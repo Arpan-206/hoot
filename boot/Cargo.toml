@@ -1,12 +1,12 @@
 [package]
-name = "sprig-boot"
+name = "hoot-boot"
 version.workspace = true
 edition = "2024"
 license.workspace = true
-description = "Boot loader for Sprig OS: swaps in firmware updates and reverts bad ones."
+description = "Boot loader for Hoot: swaps in firmware updates and reverts bad ones."
 
 [[bin]]
-name = "sprig-boot"
+name = "hoot-boot"
 test = false
 bench = false
 

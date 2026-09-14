@@ -1,7 +1,7 @@
 //! The setup hotspot and captive portal.
 //!
 //! Flow: scan for networks while still a station, start an open access
-//! point called `Sprig-Setup`, give the Sprig a fixed address, and run
+//! point called `Hoot-Setup`, give the Sprig a fixed address, and run
 //! DHCP, DNS and a small web server until the user saves settings or the
 //! portal times out. Phones open the page by themselves because every DNS
 //! name resolves to the Sprig and every unknown path redirects to `/`.
@@ -12,8 +12,8 @@ use embassy_net::tcp::{State, TcpSocket};
 use embassy_net::{ConfigV4, DhcpConfig, Ipv4Address, Ipv4Cidr, Stack, StaticConfigV4};
 use embassy_time::{Duration, Timer, with_timeout};
 use embedded_io_async::Write;
-use sprig_proto::record::FixedStr;
-use sprig_proto::{form, http};
+use hoot_proto::record::FixedStr;
+use hoot_proto::{form, http};
 
 use super::{PORTAL_IP, PORTAL_SSID, PortalResult, dhcp, dns, with};
 use crate::ui::text::{StrBuf, format};
@@ -213,7 +213,7 @@ async fn handle(
     }
 }
 
-const PAGE_HEAD: &str = "<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Sprig setup</title><style>body{font-family:system-ui,sans-serif;margin:0;background:#0e1216;color:#e8eef4}.w{max-width:420px;margin:0 auto;padding:20px}h1{color:#3ddc84;font-size:22px;margin:0 0 4px}p{color:#8b949e;margin:0 0 12px}label{display:block;margin:14px 0 6px;color:#8b949e}input{width:100%;padding:12px;font-size:16px;border-radius:8px;border:1px solid #2a333d;background:#161c24;color:#e8eef4;box-sizing:border-box}button{width:100%;padding:14px;margin-top:18px;font-size:16px;border:0;border-radius:8px;background:#3ddc84;color:#0e1216;font-weight:600}.n{display:block;width:100%;text-align:left;margin:6px 0;padding:10px 12px;background:#161c24;color:#e8eef4;border:1px solid #2a333d;border-radius:8px;font-weight:400}</style></head><body><div class=w><h1>Sprig setup</h1><p>Pick your Wi-Fi and save. The Sprig connects by itself.</p><form method=post action=/save><label>Wi-Fi network</label><input name=ssid id=ssid required autocomplete=off><div>";
+const PAGE_HEAD: &str = "<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Hoot setup</title><style>body{font-family:system-ui,sans-serif;margin:0;background:#0e1216;color:#e8eef4}.w{max-width:420px;margin:0 auto;padding:20px}h1{color:#3ddc84;font-size:22px;margin:0 0 4px}p{color:#8b949e;margin:0 0 12px}label{display:block;margin:14px 0 6px;color:#8b949e}input{width:100%;padding:12px;font-size:16px;border-radius:8px;border:1px solid #2a333d;background:#161c24;color:#e8eef4;box-sizing:border-box}button{width:100%;padding:14px;margin-top:18px;font-size:16px;border:0;border-radius:8px;background:#3ddc84;color:#0e1216;font-weight:600}.n{display:block;width:100%;text-align:left;margin:6px 0;padding:10px 12px;background:#161c24;color:#e8eef4;border:1px solid #2a333d;border-radius:8px;font-weight:400}</style></head><body><div class=w><h1>Hoot setup</h1><p>Pick your Wi-Fi and save. Hoot connects by itself.</p><form method=post action=/save><label>Wi-Fi network</label><input name=ssid id=ssid required autocomplete=off><div>";
 const PAGE_MID_A: &str = "</div><label>Password</label><input name=password type=password autocomplete=off><label>Photo server</label><input name=server value=\"";
 const PAGE_MID_B: &str = "\"><label>Frame name</label><input name=name value=\"";
 const PAGE_TAIL: &str = "\"><button>Save and connect</button></form></div><script>for(const b of document.querySelectorAll('.n'))b.onclick=e=>{e.preventDefault();ssid.value=b.textContent}</script></body></html>";
@@ -267,7 +267,7 @@ async fn send_page(sock: &mut TcpSocket<'_>, networks: &[Network], server: &Fixe
 async fn send_saved(sock: &mut TcpSocket<'_>, ssid: &str) {
     let mut esc = [0u8; 200];
     let n = form::html_escape(ssid, &mut esc).unwrap_or(0);
-    const A: &str = "<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Saved</title><style>body{font-family:system-ui,sans-serif;background:#0e1216;color:#e8eef4;margin:0}.w{max-width:420px;margin:0 auto;padding:24px}h1{color:#3ddc84}p{color:#8b949e}</style></head><body><div class=w><h1>Saved</h1><p>The Sprig is now connecting to <b>";
+    const A: &str = "<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Saved</title><style>body{font-family:system-ui,sans-serif;background:#0e1216;color:#e8eef4;margin:0}.w{max-width:420px;margin:0 auto;padding:24px}h1{color:#3ddc84}p{color:#8b949e}</style></head><body><div class=w><h1>Saved</h1><p>Hoot is now connecting to <b>";
     const B: &str = "</b>. You can close this page and rejoin your own Wi-Fi.</p></div></body></html>";
     let total = A.len() + n + B.len();
     let header: StrBuf<160> = format(format_args!(
@@ -283,7 +283,7 @@ async fn send_saved(sock: &mut TcpSocket<'_>, ssid: &str) {
 async fn send_redirect(sock: &mut TcpSocket<'_>) {
     // A body with a refresh helps clients that render the 302 instead of
     // following it.
-    const BODY: &str = "<html><head><meta http-equiv=\"refresh\" content=\"0;url=http://192.168.4.1/\"></head><body><a href=\"http://192.168.4.1/\">Sprig setup</a></body></html>";
+    const BODY: &str = "<html><head><meta http-equiv=\"refresh\" content=\"0;url=http://192.168.4.1/\"></head><body><a href=\"http://192.168.4.1/\">Hoot setup</a></body></html>";
     let header: StrBuf<200> = format(format_args!(
         "HTTP/1.1 302 Found\r\nLocation: http://192.168.4.1/\r\nContent-Type: text/html\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
         BODY.len()

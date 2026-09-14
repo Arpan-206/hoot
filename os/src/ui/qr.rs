@@ -1,7 +1,7 @@
 //! QR codes drawn straight into the framebuffer, without a heap.
 
 use qrcodegen_no_heap::{QrCode, QrCodeEcc, Version};
-use sprig_gfx::{Framebuffer, Rgb565};
+use hoot_gfx::{Framebuffer, Rgb565};
 
 /// Largest code we draw. Version 5 is 37 modules a side.
 const MAX_VERSION: Version = Version::new(5);

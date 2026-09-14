@@ -71,7 +71,7 @@ pub mod speaker_test;
 pub mod stopwatch;
 pub mod volume;
 
-use sprig_gfx::Framebuffer;
+use hoot_gfx::Framebuffer;
 
 use crate::drivers::input::{Button, Input};
 use crate::drivers::power::PowerStatus;
