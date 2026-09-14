@@ -15,6 +15,7 @@ use hoot_proto::record::{POWER_AUTO, POWER_NORMAL, POWER_SAVER};
 use crate::apps::about::{self, About};
 use crate::apps::alarm::{self, Alarm};
 use crate::apps::aquarium::{self, Aquarium};
+use crate::apps::bedside::{self, Bedside};
 use crate::apps::clock::{self, Clock};
 use crate::apps::display_test::{self, DisplayTest};
 use crate::apps::fireplace::{self, Fireplace};
@@ -30,10 +31,13 @@ use crate::apps::photo_frame::{self, PhotoFrame};
 use crate::apps::pomodoro::{self, Pomodoro};
 #[cfg(feature = "wifi")]
 use crate::apps::slideshow::{self, Slideshow};
+use crate::apps::snake::{self, Snake};
 use crate::apps::sounds::{self, Sounds};
 use crate::apps::speaker_test::{self, SpeakerTest};
 use crate::apps::stopwatch::{self, Stopwatch};
 use crate::apps::volume::{self, Volume};
+#[cfg(feature = "wifi")]
+use crate::apps::weather::{self, Weather};
 use crate::apps::{App, AppInfo, Ctx, Group, Transition};
 use crate::drivers::input::Button;
 use crate::drivers::power::PowerStatus;
@@ -63,15 +67,19 @@ enum AppId {
     Stopwatch,
     Clock,
     Alarm,
+    Bedside,
     Fireplace,
     Aquarium,
     Sounds,
+    Snake,
     #[cfg(feature = "wifi")]
     PhotoFrame,
     #[cfg(feature = "wifi")]
     Messages,
     #[cfg(feature = "wifi")]
     Slideshow,
+    #[cfg(feature = "wifi")]
+    Weather,
     #[cfg(feature = "wifi")]
     Network,
 }
@@ -141,13 +149,17 @@ const APPS: &[(Group, Entry)] = &[
     (messages::INFO.group, app(&messages::INFO, AppId::Messages)),
     #[cfg(feature = "wifi")]
     (slideshow::INFO.group, app(&slideshow::INFO, AppId::Slideshow)),
+    #[cfg(feature = "wifi")]
+    (weather::INFO.group, app(&weather::INFO, AppId::Weather)),
     (fireplace::INFO.group, app(&fireplace::INFO, AppId::Fireplace)),
     (aquarium::INFO.group, app(&aquarium::INFO, AppId::Aquarium)),
     (sounds::INFO.group, app(&sounds::INFO, AppId::Sounds)),
+    (snake::INFO.group, app(&snake::INFO, AppId::Snake)),
     (pomodoro::INFO.group, app(&pomodoro::INFO, AppId::Pomodoro)),
     (stopwatch::INFO.group, app(&stopwatch::INFO, AppId::Stopwatch)),
     (clock::INFO.group, app(&clock::INFO, AppId::Clock)),
     (alarm::INFO.group, app(&alarm::INFO, AppId::Alarm)),
+    (bedside::INFO.group, app(&bedside::INFO, AppId::Bedside)),
     (input_test::INFO.group, app(&input_test::INFO, AppId::InputTest)),
     (leds::INFO.group, app(&leds::INFO, AppId::Leds)),
     (display_test::INFO.group, app(&display_test::INFO, AppId::DisplayTest)),
@@ -216,15 +228,19 @@ pub struct Shell {
     stopwatch: Stopwatch,
     clock: Clock,
     alarm: Alarm,
+    bedside: Bedside,
     fireplace: Fireplace,
     aquarium: Aquarium,
     sounds: Sounds,
+    snake: Snake,
     #[cfg(feature = "wifi")]
     photo_frame: PhotoFrame,
     #[cfg(feature = "wifi")]
     messages: Messages,
     #[cfg(feature = "wifi")]
     slideshow: Slideshow,
+    #[cfg(feature = "wifi")]
+    weather: Weather,
     #[cfg(feature = "wifi")]
     network: NetworkApp,
 }
@@ -255,15 +271,19 @@ impl Shell {
             stopwatch: Stopwatch::new(),
             clock: Clock::new(),
             alarm: Alarm::new(),
+            bedside: Bedside::new(),
             fireplace: Fireplace::new(),
             aquarium: Aquarium::new(),
             sounds: Sounds::new(),
+            snake: Snake::new(),
             #[cfg(feature = "wifi")]
             photo_frame: PhotoFrame::new(),
             #[cfg(feature = "wifi")]
             messages: Messages::new(),
             #[cfg(feature = "wifi")]
             slideshow: Slideshow::new(),
+            #[cfg(feature = "wifi")]
+            weather: Weather::new(),
             #[cfg(feature = "wifi")]
             network: NetworkApp,
         };
@@ -346,15 +366,19 @@ impl Shell {
             AppId::Stopwatch => &mut self.stopwatch,
             AppId::Clock => &mut self.clock,
             AppId::Alarm => &mut self.alarm,
+            AppId::Bedside => &mut self.bedside,
             AppId::Fireplace => &mut self.fireplace,
             AppId::Aquarium => &mut self.aquarium,
             AppId::Sounds => &mut self.sounds,
+            AppId::Snake => &mut self.snake,
             #[cfg(feature = "wifi")]
             AppId::PhotoFrame => &mut self.photo_frame,
             #[cfg(feature = "wifi")]
             AppId::Messages => &mut self.messages,
             #[cfg(feature = "wifi")]
             AppId::Slideshow => &mut self.slideshow,
+            #[cfg(feature = "wifi")]
+            AppId::Weather => &mut self.weather,
             #[cfg(feature = "wifi")]
             AppId::Network => &mut self.network,
         }

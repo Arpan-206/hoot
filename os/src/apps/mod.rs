@@ -51,6 +51,7 @@
 
 pub mod about;
 pub mod alarm;
+pub mod bedside;
 pub mod aquarium;
 pub mod clock;
 pub mod display_test;
@@ -67,10 +68,13 @@ pub mod photo_frame;
 pub mod pomodoro;
 #[cfg(feature = "wifi")]
 pub mod slideshow;
+pub mod snake;
 pub mod sounds;
 pub mod speaker_test;
 pub mod stopwatch;
 pub mod volume;
+#[cfg(feature = "wifi")]
+pub mod weather;
 
 use hoot_gfx::Framebuffer;
 

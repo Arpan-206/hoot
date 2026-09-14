@@ -17,3 +17,4 @@ pub mod pet;
 pub mod record;
 pub mod time;
 pub mod url;
+pub mod weather;

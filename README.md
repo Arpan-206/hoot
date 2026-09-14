@@ -28,6 +28,7 @@ a 160x128 colour display, eight buttons, two white LEDs and a speaker.
 | Speaker: I2S tones from PIO1 and DMA, volume setting | Done, verified on hardware |
 | Clock from the server heartbeat, daily alarm | Done, verified on hardware |
 | Live photos: motion frames streamed from the server | Done, untested on hardware |
+| Weather from Open-Meteo, Bedside clock, Snake | Done, untested on hardware |
 | Goals renamed from the web page, kept offline | Done, untested on hardware |
 | Hoot the owl: hatching, check-in, goals, breathing, adventures, outfits, the week, hugs | Done, untested on hardware |
 | Slideshow of the last uploads, cached in flash | Done, untested on hardware |
@@ -143,9 +144,9 @@ submenus from that. A group with nothing usable on the board is hidden.
 | Menu | Entries |
 | --- | --- |
 | Top | Hoot, Frame, Fun, Tools, About, Settings, Developer |
-| Frame | Photo frame, Messages, Slideshow |
-| Fun | Fireplace, Aquarium, Sounds |
-| Tools | Pomodoro, Stopwatch, Clock, Alarm |
+| Frame | Photo frame, Messages, Slideshow, Weather |
+| Fun | Fireplace, Aquarium, Sounds, Snake |
+| Tools | Pomodoro, Stopwatch, Clock, Alarm, Bedside |
 | Settings | Network, Battery saver, Volume, Clear photo cache, Reboot, Reboot to USB |
 | Developer | Input test, LEDs & backlight, Display test, Speaker test |
 
@@ -173,6 +174,9 @@ Messages also shows next to Frame on the top menu.
 | Alarm | W/S, A/D, L, K | Hour, minute, on or off, next tone. While ringing: L stops, K snoozes 5 min |
 | Sounds | W A S D I K L | One sound per key |
 | Slideshow | A/D, W/S | Previous or next photo, dwell time down or up in 5 s steps |
+| Weather | K | Refresh the forecast |
+| Bedside | Any key, J | Light up for eight seconds; leave |
+| Snake | W A S D, L, K | Steer, start or restart, pause |
 | Fireplace | W/S | More or less fuel |
 | Network (Pico W only) | L or D | Connect to Wi-Fi |
 | Network (Pico W only) | K | Open the setup hotspot |
@@ -352,6 +356,27 @@ is fetched straight into a spare screen buffer in RAM and shown, then the
 still comes back from flash. The pace is the network's, a few frames a
 second. Offline, or in battery saver, the still is all there is. A plain
 upload without a clip clears the motion.
+
+## Weather
+
+Set the frame's town on the web page. The server looks it up once with
+Open-Meteo, keeps the forecast for half an hour, and hands the device a
+few lines: the town, the current temperature, sky, wind and humidity, and
+the next three days. The device draws the sky as a small picture: sun,
+cloud, rain, snow, fog or thunder. K refreshes. Without a town, the
+screen says so.
+
+## Bedside
+
+A dim clock for the night. The backlight drops to a glow, the time shows
+large in amber with the date and the alarm if one is set. Any key brings
+the light up for eight seconds. J leaves and restores the backlight. The
+alarm still fires from here, since it lives in the background.
+
+## Snake
+
+Twenty by fourteen cells. W A S D steer, L starts, K pauses. It speeds up
+as it grows. The best score lives in the config record.
 
 ## Sounds
 
