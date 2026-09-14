@@ -4,7 +4,8 @@ A small operating system for the Hack Club Sprig, written in Rust on the
 Embassy async runtime. It replaces the stock Spade firmware. It shares no
 code with it.
 
-Hoot is named for the owl on the splash screen. It is the mascot now and
+Hoot is named for the barn owl on the splash screen. The look is a night
+palette: amber and cream on deep indigo, like a lamp left on for someone. It is the mascot now and
 the digital pet later: it will live in the background, sleep at night,
 hoot the alarm, and get excited when a note arrives. Only the hardware is
 still called a Sprig, so pins, the board and the `X-Sprig-*` heartbeat
@@ -172,7 +173,7 @@ Messages also shows next to Frame on the top menu.
 
 ## First boot checklist
 
-1. The splash shows "Hoot" the right way up. If it is upside down,
+1. The splash shows the owl on its branch and "Hoot" the right way up. If it is upside down,
    change `TFT_MADCTL` in `os/src/board.rs`.
 2. In "Display test" the bar marked R is red and B is blue. If they are
    swapped, add `MADCTL_BGR` to `TFT_MADCTL`.

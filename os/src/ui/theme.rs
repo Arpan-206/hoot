@@ -4,13 +4,15 @@ use hoot_gfx::{CELL_HEIGHT, Framebuffer, HEIGHT, Rgb565, WIDTH};
 
 use crate::net::NetState;
 
-pub const BG: Rgb565 = Rgb565::hex(0x0E1216);
-pub const BAR: Rgb565 = Rgb565::hex(0x1B2430);
-pub const ACCENT: Rgb565 = Rgb565::hex(0x3DDC84);
-pub const ACCENT_DARK: Rgb565 = Rgb565::hex(0x0B3D25);
-pub const TEXT: Rgb565 = Rgb565::hex(0xE8EEF4);
-pub const MUTED: Rgb565 = Rgb565::hex(0x7D8A99);
-pub const WARN: Rgb565 = Rgb565::hex(0xF2C14E);
+// Night palette: deep indigo with a warm amber glow, like a lamp left on
+// for someone. Cream text reads well on the small display.
+pub const BG: Rgb565 = Rgb565::hex(0x12142B);
+pub const BAR: Rgb565 = Rgb565::hex(0x1E2242);
+pub const ACCENT: Rgb565 = Rgb565::hex(0xF2B84B);
+pub const ACCENT_DARK: Rgb565 = Rgb565::hex(0x4A3A16);
+pub const TEXT: Rgb565 = Rgb565::hex(0xF4EBD0);
+pub const MUTED: Rgb565 = Rgb565::hex(0x8E93B4);
+pub const WARN: Rgb565 = Rgb565::hex(0xFF7B5C);
 
 pub const TITLE_H: i32 = 12;
 /// First free row below the title bar.
@@ -41,7 +43,7 @@ pub fn meter(fb: &mut Framebuffer, x: i32, y: i32, w: i32, h: i32, value: u8, co
     fb.fill_rect(x + 1, y + 1, inner, h - 2, color);
 }
 
-/// Colour for a network state: green when up, amber when in trouble.
+/// Colour for a network state: amber when up, coral when in trouble.
 pub fn net_color(state: NetState) -> Rgb565 {
     match state {
         NetState::NoRadio => MUTED,
