@@ -145,7 +145,7 @@ fn draw(fb: &mut Framebuffer, s: &Stopwatch, elapsed: u32, running: bool) {
     let hint = match (running, elapsed) {
         (true, _) => "L stop   K lap   J back",
         (false, 0) => "L start   J back",
-        (false, _) => "L resume   K reset   J back",
+        (false, _) => "L resume  K reset  J back",
     };
     theme::footer(fb, hint);
 }

@@ -89,7 +89,7 @@ fn draw(fb: &mut Framebuffer, time: Option<Civil>, source: Source) {
         None => {
             fb.draw_text_centered(30, "--:--", theme::MUTED, None, 3);
             fb.draw_text_centered(60, "clock not set", theme::WARN, None, 1);
-            fb.draw_text_centered(74, "a Pico W gets it from the server", theme::MUTED, None, 1);
+            fb.draw_text_centered(74, "Pico W: set by the server", theme::MUTED, None, 1);
         }
     }
     theme::footer(fb, "W/S hour  A/D min  L zero");

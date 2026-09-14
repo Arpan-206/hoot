@@ -89,5 +89,5 @@ fn draw(fb: &mut Framebuffer, level: u8) {
         let fill = if lit { theme::ACCENT } else { theme::BAR };
         fb.fill_rect(x0 + i * (seg_w + gap), 92 - h, seg_w, h, fill);
     }
-    theme::footer(fb, "A/D change   L test   J back");
+    theme::footer(fb, "A/D level  L test  J back");
 }

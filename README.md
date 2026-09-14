@@ -102,6 +102,11 @@ cargo host-test -- font_sheet --nocapture   # prints the font as ASCII art
 The `host-test` alias targets Apple Silicon. Edit `.cargo/config.toml` for
 another host.
 
+The display holds 26 characters across at the small size. Run
+`python3 tools/check_text.py` to find any literal that would run off the
+edge: footers, hints and centred lines. The release script runs it first
+and refuses to publish while anything overflows.
+
 ## Flash
 
 The OS runs behind a small boot loader, so a Sprig is set up in three

@@ -531,7 +531,7 @@ fn face_rows(value: u8) -> [u8; 8] {
 fn draw_check_in(fb: &mut Framebuffer, pet: &Pet, face: u8, eyes_shut: bool) {
     theme::screen(fb, "Hoot", "check in");
     owl_left(fb, pet, eyes_shut);
-    fb.draw_text(52, 26, "How are you today?", theme::TEXT, None);
+    fb.draw_text(46, 26, "How are you today?", theme::TEXT, None);
     for v in 1..=5u8 {
         let x = 50 + (v as i32 - 1) * 22;
         let y = 44;
@@ -543,7 +543,7 @@ fn draw_check_in(fb: &mut Framebuffer, pet: &Pet, face: u8, eyes_shut: bool) {
         fb.draw_bitmap_scaled(x, y, 8, 8, &face_rows(v), color, 2);
     }
     fb.draw_text_centered_in(48, WIDTH, 74, mood_word(face), theme::ACCENT);
-    fb.draw_text(52, 92, "Hoot won't tell anyone.", theme::MUTED, None);
+    fb.draw_text_centered(92, "Hoot won't tell a soul.", theme::MUTED, None, 1);
     theme::footer(fb, "A/D pick   L me   J skip");
 }
 

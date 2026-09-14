@@ -7,6 +7,7 @@
 set -eu
 DIR="${1:?usage: tools/release.sh <frame-server directory>}"
 cd "$(dirname "$0")/.."
+python3 tools/check_text.py || { echo "fix the text that overflows the screen first"; exit 1; }
 cargo build --release -p hoot --features wifi
 python3 tools/mkbin.py target/thumbv6m-none-eabi/release/hoot target/hoot.bin
 V=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')

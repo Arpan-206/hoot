@@ -166,7 +166,7 @@ impl Messages {
         if !self.status.is_empty() && self.count > 0 {
             fb.draw_text_right(WIDTH - 3, theme::FOOTER_Y, self.status.as_str(), theme::WARN, None);
         } else {
-            theme::footer(fb, "L seen   K refresh   J back");
+            theme::footer(fb, "L seen  K refresh  J back");
         }
     }
 }
