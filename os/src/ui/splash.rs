@@ -53,6 +53,12 @@ const EYES: [u16; OWL as usize] = [
     0b0000_1100_0011_0000,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ];
+/// Eyes shut: one line where the lower row of each eye was.
+const EYES_SHUT: [u16; OWL as usize] = [
+    0, 0, 0, 0, 0,
+    0b0000_1100_0011_0000,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+];
 const BEAK_ROWS: [u16; OWL as usize] = [
     0, 0, 0, 0, 0, 0,
     0b0000_0001_1000_0000,
@@ -104,6 +110,23 @@ fn moon(fb: &mut Framebuffer, cx: i32, cy: i32, r: i32) {
     }
 }
 
+/// Where the splash puts the owl: top-left corner and scale.
+const fn owl_origin() -> (i32, i32, i32) {
+    let scale = 3;
+    (((WIDTH - OWL * scale) / 2), 12, scale)
+}
+
+/// Shut or open the owl's eyes on the splash. Cheap: only the eyes redraw.
+pub fn blink(fb: &mut Framebuffer, shut: bool) {
+    let (x, y, scale) = owl_origin();
+    if shut {
+        layer(fb, x, y, &EYES, theme::TEXT, scale);
+        layer(fb, x, y, &EYES_SHUT, theme::BG, scale);
+    } else {
+        layer(fb, x, y, &EYES, theme::BG, scale);
+    }
+}
+
 pub fn draw(fb: &mut Framebuffer) {
     fb.clear(theme::BG);
     // A few stars and the moon.
@@ -114,10 +137,8 @@ pub fn draw(fb: &mut Framebuffer) {
     fb.set(146, 12, theme::MUTED);
     moon(fb, 132, 16, 8);
 
-    let scale = 3;
+    let (x, y, scale) = owl_origin();
     let size = OWL * scale;
-    let x = (WIDTH - size) / 2;
-    let y = 12;
     draw_owl(fb, x, y, scale);
     // The branch, with a twig.
     let branch_y = y + size - 2;

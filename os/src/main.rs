@@ -265,7 +265,8 @@ async fn main(spawner: Spawner) {
             (Power::new(adc, None, None), net)
         }
     };
-    // Splash screen, then fade the backlight in over about 300 ms.
+    // Splash screen: fade the backlight in over about 300 ms, hold, let the
+    // owl blink once, hold again. About two seconds in all.
     let mut dma_ok = true;
     ui::splash::draw(fb);
     push_frame(display, fb, &mut dma_ok).await;
@@ -275,7 +276,14 @@ async fn main(spawner: Spawner) {
         Timer::after_millis(6).await;
     }
     backlight.set(255);
-    Timer::after_millis(400).await;
+    Timer::after_millis(600).await;
+    ui::splash::blink(fb, true);
+    push_frame(display, fb, &mut dma_ok).await;
+    Timer::after_millis(140).await;
+    ui::splash::blink(fb, false);
+    push_frame(display, fb, &mut dma_ok).await;
+    fb.take_dirty();
+    Timer::after_millis(900).await;
 
     let mut hw = Hardware {
         module,
