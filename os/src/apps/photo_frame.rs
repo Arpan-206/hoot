@@ -12,9 +12,9 @@
 //! the config it reads before every poll.
 //!
 //! Live photos: when the server holds motion frames for the current photo
-//! (`X-Sprig-Live`), the frame plays them every so often while online,
-//! one frame per request straight into RAM, then settles back on the
-//! still from flash. Offline, the still is all there is.
+//! (`X-Sprig-Live`), K plays them while online, one frame per request
+//! straight into RAM, then the still comes back from flash. Offline, the
+//! still is all there is.
 //!
 //! Behaviour follows the original: once a photo is on screen nothing draws
 //! over it. Trouble shows on the left LED instead: two pulses when a working
@@ -47,12 +47,9 @@ const KIND_PHOTO: u32 = 0x5048_4F54;
 /// new one is complete.
 const SLOT_A: u8 = 0;
 const SLOT_B: u8 = 1;
-/// How often the motion plays, how long to wait after a failed play, and
-/// how long the last frame holds before the still returns.
-/// Rare on its own: each play is 400 KiB from the server, and a free
-/// server has a small monthly allowance. K plays it any time.
-const LIVE_EVERY_MS: u32 = 10 * 60_000;
-const LIVE_RETRY_MS: u32 = 300_000;
+/// How long the last motion frame holds before the still returns. The
+/// motion plays only when K is pressed: each play is 400 KiB from the
+/// server, and a free server has a small monthly allowance.
 const LIVE_HOLD_MS: u32 = 500;
 
 /// Forget the cached photo: both slots and the stored timestamp. The next
@@ -109,13 +106,12 @@ pub struct PhotoFrame {
     hold_started: Option<u32>,
     /// Motion frames the server holds for the photo on screen.
     live_frames: u8,
-    live_next_ms: u32,
     /// The frame being fetched while the motion plays.
     live_playing: Option<u8>,
     live_started_ms: u32,
     /// When to put the still back after the last frame.
     live_restore_ms: Option<u32>,
-    /// K was pressed: play now, battery saver or not.
+    /// K was pressed: play as soon as the network lane is free.
     live_manual: bool,
 }
 
@@ -132,7 +128,6 @@ impl PhotoFrame {
             blink: Blink::new(),
             hold_started: None,
             live_frames: 0,
-            live_next_ms: 0,
             live_playing: None,
             live_started_ms: 0,
             live_restore_ms: None,
@@ -156,16 +151,15 @@ impl PhotoFrame {
             Ok(()) => self.live_playing = Some(n),
             Err(e) => {
                 warn!("live: {}", e.label());
-                self.live_stop(ctx, LIVE_RETRY_MS);
+                self.live_stop(ctx);
             }
         }
     }
 
-    /// Back to the still, and plan the next play.
-    fn live_stop(&mut self, ctx: &mut Ctx, next_in_ms: u32) {
+    /// Back to the still.
+    fn live_stop(&mut self, ctx: &mut Ctx) {
         self.live_playing = None;
         self.live_restore_ms = None;
-        self.live_next_ms = ctx.now_ms.wrapping_add(next_in_ms);
         let slot = ctx.store.config().frame_slot;
         Self::show_slot(ctx, slot);
     }
@@ -174,7 +168,7 @@ impl PhotoFrame {
         let now = ctx.now_ms;
         if r.status != 200 || r.len as usize != BYTES {
             warn!("live: frame {} HTTP {} len {}", n, r.status, r.len);
-            self.live_stop(ctx, LIVE_RETRY_MS);
+            self.live_stop(ctx);
             return;
         }
         let Ctx { net, fb, .. } = ctx;
@@ -185,7 +179,6 @@ impl PhotoFrame {
             info!("live: {} frames in {} ms", self.live_frames, now.wrapping_sub(self.live_started_ms));
             self.live_playing = None;
             self.live_restore_ms = Some(now.wrapping_add(LIVE_HOLD_MS));
-            self.live_next_ms = now.wrapping_add(LIVE_EVERY_MS);
         }
     }
 
@@ -239,9 +232,6 @@ impl PhotoFrame {
         let now = ctx.now_ms;
         info!("photo: HTTP {} len {} last-modified '{}' live {}", r.status, r.len, r.last_modified.as_str(), r.live);
         if r.status == 200 || r.status == 304 {
-            if r.live > 0 && self.live_frames == 0 {
-                self.live_next_ms = now.wrapping_add(3_000);
-            }
             self.live_frames = r.live;
         }
         match r.status {
@@ -354,7 +344,6 @@ impl App for PhotoFrame {
         if ctx.input.just_pressed(Button::K) && self.photo_on_screen && self.live_playing.is_none() {
             if self.live_frames > 0 && ctx.net.state().is_up() {
                 self.live_manual = true;
-                self.live_next_ms = now;
                 audio::play(Sound::Tick);
             } else {
                 info!("live: nothing to play (frames {}, online {})", self.live_frames, ctx.net.state().is_up());
@@ -367,7 +356,7 @@ impl App for PhotoFrame {
                 JobState::Done(r) => self.live_finish(ctx, r, n),
                 JobState::Failed(e) => {
                     warn!("live: {}", e.label());
-                    self.live_stop(ctx, LIVE_RETRY_MS);
+                    self.live_stop(ctx);
                 }
                 _ => {}
             }
@@ -380,9 +369,8 @@ impl App for PhotoFrame {
         } else if self.photo_on_screen
             && !self.fetching
             && self.live_frames > 0
-            && (!ctx.saver || self.live_manual)
+            && self.live_manual
             && state.is_up()
-            && now.wrapping_sub(self.live_next_ms) < 1 << 31
         {
             self.live_manual = false;
             self.live_started_ms = now;
