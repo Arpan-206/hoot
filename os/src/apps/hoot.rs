@@ -65,6 +65,7 @@ static HUG: AtomicBool = AtomicBool::new(false);
 /// Who sent the hug, if the page said.
 static HUG_FROM: Mutex<CriticalSectionRawMutex, RefCell<FixedStr<12>>> = Mutex::new(RefCell::new(FixedStr::new()));
 static FOCUS: AtomicBool = AtomicBool::new(false);
+static RESET: AtomicBool = AtomicBool::new(false);
 static STAGE: AtomicU8 = AtomicU8::new(0);
 static ENERGY: AtomicU8 = AtomicU8::new(0);
 static GOALS_TODAY: AtomicU8 = AtomicU8::new(0);
@@ -84,6 +85,13 @@ pub fn goal_name(cfg: &Config, goal: usize) -> &str {
         Some(slot) if !cfg.goal_names[slot].is_empty() => cfg.goal_names[slot].as_str(),
         _ => GOALS[goal],
     }
+}
+
+/// Start Hoot over, egg and all (server command "hoot-reset"), for a
+/// device handed to someone new.
+#[cfg_attr(not(feature = "wifi"), allow(dead_code))]
+pub fn reset() {
+    RESET.store(true, Ordering::Relaxed);
 }
 
 /// A focus session finished (from the Pomodoro).
@@ -262,6 +270,14 @@ impl HootApp {
             self.asleep = Self::night(now);
         }
 
+        if RESET.swap(false, Ordering::Relaxed) {
+            info!("hoot: reset to an egg");
+            self.pet = Pet::new();
+            self.screen = Screen::Intro;
+            self.intro_step = 0;
+            self.drawn = None;
+            self.changed();
+        }
         if FOCUS.swap(false, Ordering::Relaxed) && self.pet.complete(GOAL_FOCUS) {
             info!("hoot: focus session counted");
             self.say("Focus done. +20", now);

@@ -136,7 +136,7 @@ pub struct FetchResult {
     /// CRC-32 of the stored body when the sink was a blob slot.
     pub crc32: u32,
     /// `X-Sprig-Command` from the server, or empty.
-    pub command: FixedStr<16>,
+    pub command: FixedStr<96>,
     /// `X-Sprig-Unread` from the server: messages waiting.
     pub unread: u8,
     /// `X-Sprig-Time` from the server, seconds since 1970 UTC, if sent.
@@ -227,6 +227,8 @@ pub struct Shared {
     /// Photo server and frame name, shown as defaults on the portal page.
     pub server: FixedStr<96>,
     pub name: FixedStr<24>,
+    /// Sent as `X-Sprig-Key` on every request. Empty = none.
+    pub key: FixedStr<32>,
     /// USB power present, read from the radio chip on a Pico W. `None`
     /// until the radio is up.
     pub usb_power: Option<bool>,
@@ -247,6 +249,7 @@ impl Shared {
             password: FixedStr::new(),
             server: FixedStr::new(),
             name: FixedStr::new(),
+            key: FixedStr::new(),
             usb_power: None,
             requests: [None, None],
             jobs: [JobState::Idle; LANES],
@@ -278,8 +281,19 @@ impl NetHandle {
             s.password = cfg.wifi_password;
             s.server = cfg.frame_server;
             s.name = cfg.frame_name;
+            s.key = cfg.device_key;
         });
         Self { has_radio }
+    }
+
+    /// The server, name or key changed (a command or the portal): tell
+    /// the network task and the request builder.
+    pub fn apply_config(&mut self, cfg: &Config) {
+        with(|s| {
+            s.server = cfg.frame_server;
+            s.name = cfg.frame_name;
+            s.key = cfg.device_key;
+        });
     }
 
     pub fn has_radio(&self) -> bool {

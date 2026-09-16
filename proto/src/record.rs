@@ -100,6 +100,9 @@ pub struct Config {
     pub goals_stamp: u32,
     /// Best Snake score.
     pub snake_best: u16,
+    /// Sent as `X-Sprig-Key` on every request, so a public server can tell
+    /// this device from anyone else. Empty = none.
+    pub device_key: FixedStr<32>,
 }
 
 pub const POWER_AUTO: u8 = 0;
@@ -116,10 +119,10 @@ const VERSION: u16 = 1;
 /// Encoded size in bytes: header, payload, CRC. Fields added later sit at
 /// the end of the payload; older, shorter records still decode and the
 /// missing fields take their defaults. Never reorder or remove a field.
-pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 33 + 5 * (GOAL_NAME_MAX + 1) + 4 + 2 + 4;
+pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 33 + 5 * (GOAL_NAME_MAX + 1) + 4 + 2 + 33 + 4;
 /// Bytes after `poll_secs`, added by later firmware one at a time.
 #[cfg(test)]
-const TRAILING_LEN: usize = 1 + 1 + 2 + 1 + 1 + 33 + 5 * (GOAL_NAME_MAX + 1) + 4 + 2;
+const TRAILING_LEN: usize = 1 + 1 + 2 + 1 + 1 + 33 + 5 * (GOAL_NAME_MAX + 1) + 4 + 2 + 33;
 const HEADER_LEN: usize = 12;
 const CRC_LEN: usize = 4;
 
@@ -236,6 +239,7 @@ pub fn encode(cfg: &Config, seq: u32, out: &mut [u8]) -> Option<usize> {
     }
     c.put(&cfg.goals_stamp.to_le_bytes())?;
     c.put(&cfg.snake_best.to_le_bytes())?;
+    c.put_str(&cfg.device_key)?;
     let body_len = c.pos;
     let crc = crc32(&c.buf[..body_len]);
     c.put(&crc.to_le_bytes())?;
@@ -285,6 +289,7 @@ pub fn decode(buf: &[u8]) -> Option<(Config, u32)> {
         ],
         goals_stamp: r.u32().unwrap_or(0),
         snake_best: r.u16().unwrap_or(0),
+        device_key: r.str().unwrap_or_default(),
     };
     Some((cfg, seq))
 }
@@ -324,6 +329,7 @@ mod tests {
         c.goal_names[1].set("Walk the dog");
         c.goals_stamp = 77;
         c.snake_best = 42;
+        c.device_key.set("k3y-for-tests");
         c
     }
 
@@ -357,6 +363,7 @@ mod tests {
         assert!(cfg.goal_names.iter().all(|n| n.is_empty()));
         assert_eq!(cfg.goals_stamp, 0);
         assert_eq!(cfg.snake_best, 0);
+        assert!(cfg.device_key.is_empty());
     }
 
     #[test]

@@ -37,6 +37,14 @@ pub fn updater<'a>(flash: &'a FlashMutex, scratch: &'a mut Scratch) -> Updater<'
 
 /// Tell the boot loader this image works, so it stops the rollback timer.
 /// Returns true if a pending swap was confirmed.
+/// True when the boot loader has just swapped in new firmware and waits
+/// for it to prove itself.
+pub fn in_trial(flash: &FlashMutex) -> bool {
+    let mut scratch = AlignedBuffer([0u8; 1]);
+    let mut up = updater(flash, &mut scratch);
+    matches!(up.get_state(), Ok(State::Swap))
+}
+
 pub fn confirm_boot(flash: &FlashMutex) -> bool {
     let mut scratch = AlignedBuffer([0u8; 1]);
     let mut up = updater(flash, &mut scratch);

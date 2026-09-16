@@ -69,6 +69,10 @@ const FRAME_MS: u64 = 16;
 const WATCHDOG: Duration = Duration::from_millis(3_000);
 /// After running this long, tell the boot loader the firmware is good.
 const CONFIRM_BOOT_MS: u32 = 20_000;
+/// A trial boot (fresh update) that cannot reach the server in this long
+/// is reset, and the boot loader brings the previous firmware back. An
+/// update can then never strand a device we only reach over the network.
+const TRIAL_LIMIT_MS: u32 = 10 * 60_000;
 /// How often the power reading is refreshed.
 const POWER_POLL_MS: u32 = 500;
 /// Battery saver: dim the backlight after this long without a key press.
@@ -306,15 +310,30 @@ async fn main(spawner: Spawner) {
     let mut ticker = Ticker::every(Duration::from_millis(FRAME_MS));
     let mut frame_ms = 0u32;
     let mut boot_confirmed = false;
+    let trial = ota::in_trial(flash);
+    if trial {
+        info!("ota: trial boot; confirming after the first heartbeat");
+    }
     let mut power = hw.power.read();
     let mut next_power_ms = 0u32;
     let mut idle = IdleDimmer { last_input_ms: 0, dimmed: false, user_level: 255 };
     loop {
         let start = Instant::now();
         let now_ms = start.as_millis() as u32;
-        if !boot_confirmed && now_ms >= CONFIRM_BOOT_MS {
-            boot_confirmed = true;
-            ota::confirm_boot(flash);
+        if !boot_confirmed {
+            // With a radio, the new firmware must reach the server first.
+            #[cfg(feature = "wifi")]
+            let ready = if has_radio { agent.heartbeat_ok() } else { now_ms >= CONFIRM_BOOT_MS };
+            #[cfg(not(feature = "wifi"))]
+            let ready = now_ms >= CONFIRM_BOOT_MS;
+            if ready {
+                boot_confirmed = true;
+                ota::confirm_boot(flash);
+            } else if trial && has_radio && now_ms >= TRIAL_LIMIT_MS {
+                warn!("ota: no heartbeat in the trial window; reverting");
+                Timer::after_millis(300).await;
+                cortex_m::peripheral::SCB::sys_reset();
+            }
         }
         if now_ms.wrapping_sub(next_power_ms) < u32::MAX / 2 {
             power = hw.power.read();

@@ -63,6 +63,8 @@ pub struct Agent {
     fetch_goals: bool,
     goals_stamp: u32,
     fails: u8,
+    /// A heartbeat has been answered since boot: the server is reachable.
+    heartbeat_ok: bool,
 }
 
 fn due(now: u32, at: u32) -> bool {
@@ -91,8 +93,13 @@ impl Agent {
             check_update: false,
             fetch_goals: false,
             goals_stamp: 0,
+            heartbeat_ok: false,
             fails: 0,
         }
+    }
+
+    pub fn heartbeat_ok(&self) -> bool {
+        self.heartbeat_ok
     }
 
     /// Run once per frame. `app` is the name of the screen currently shown.
@@ -237,6 +244,7 @@ impl Agent {
             self.fails = self.fails.saturating_add(1);
         } else {
             self.fails = 0;
+            self.heartbeat_ok = true;
             set_unread(r.unread);
             if r.goals_stamp != 0 && r.goals_stamp != store.config().goals_stamp {
                 self.goals_stamp = r.goals_stamp;
@@ -262,6 +270,29 @@ impl Agent {
             crate::apps::hoot::hug_from(from.trim_start_matches(':').trim());
             return;
         }
+        // Remote service: move the device to another server, rename it,
+        // or give it a key. The photo is fetched afresh afterwards.
+        if let Some(v) = command.strip_prefix("server:") {
+            let _ = store.update_config(|c| {
+                c.frame_server.set(v.trim());
+                c.frame_last_modified.clear();
+            });
+        } else if let Some(v) = command.strip_prefix("name:") {
+            let _ = store.update_config(|c| {
+                c.frame_name.set(v.trim());
+                c.frame_last_modified.clear();
+            });
+        } else if let Some(v) = command.strip_prefix("key:") {
+            let _ = store.update_config(|c| {
+                c.device_key.set(v.trim());
+            });
+        }
+        if command.starts_with("server:") || command.starts_with("name:") || command.starts_with("key:") {
+            net.apply_config(store.config());
+            info!("agent: settings changed by command");
+            self.next_poll_ms = now.wrapping_add(2_000);
+            return;
+        }
         match command {
             "reboot" => cortex_m::peripheral::SCB::sys_reset(),
             "clear-cache" => {
@@ -272,6 +303,7 @@ impl Agent {
                 let _ = store.update_config(|c| c.frame_last_modified.clear());
             }
             "portal" => net.request_portal(),
+            "hoot-reset" => crate::apps::hoot::reset(),
             "update" => {
                 self.check_update = true;
                 self.next_ota_ms = now;

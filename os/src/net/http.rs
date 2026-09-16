@@ -57,6 +57,14 @@ pub async fn fetch(
 
     // Host header: name plus port when it is not the default.
     let mut host = FixedStr::<96>::truncated(u.host);
+    // Every request carries the device key, when one is set.
+    let key = super::with(|s| s.key);
+    let mut extra = FixedStr::<368>::truncated(req.headers.as_str());
+    if !key.is_empty() {
+        extra.push_str("X-Sprig-Key: ");
+        extra.push_str(key.as_str());
+        extra.push_str("\r\n");
+    }
     if u.port != 80 {
         let mut port = [0u8; 6];
         host.push_str(itoa(u.port as u32, &mut port));
@@ -65,14 +73,14 @@ pub async fn fetch(
     let mut reqbuf = [0u8; 640];
     match req.body {
         Body::None => {
-            let n = http::write_get(&mut reqbuf, host.as_str(), u.path, ims, req.headers.as_str())
+            let n = http::write_get(&mut reqbuf, host.as_str(), u.path, ims, extra.as_str())
                 .ok_or(FetchError::BadUrl)?;
             sock.write_all(&reqbuf[..n]).await.map_err(|_| FetchError::Connect)?;
         }
         Body::RecentWarnings => {
             let mut lines = [0u8; 1024];
             let len = crate::logging::drain_into(&mut lines);
-            let n = http::write_post(&mut reqbuf, host.as_str(), u.path, "text/plain", len, req.headers.as_str())
+            let n = http::write_post(&mut reqbuf, host.as_str(), u.path, "text/plain", len, extra.as_str())
                 .ok_or(FetchError::BadUrl)?;
             sock.write_all(&reqbuf[..n]).await.map_err(|_| FetchError::Connect)?;
             sock.write_all(&lines[..len]).await.map_err(|_| FetchError::Connect)?;
@@ -85,7 +93,7 @@ pub async fn fetch(
                 u.path,
                 "application/x-www-form-urlencoded",
                 body.len(),
-                req.headers.as_str(),
+                extra.as_str(),
             )
             .ok_or(FetchError::BadUrl)?;
             sock.write_all(&reqbuf[..n]).await.map_err(|_| FetchError::Connect)?;
