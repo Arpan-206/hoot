@@ -114,6 +114,9 @@ enum Action {
     RebootToUsb,
     /// Built-in config back, every blob slot emptied, then a reboot.
     FactoryReset,
+    /// Ask the server for a newer firmware now.
+    #[cfg(feature = "wifi")]
+    CheckUpdate,
 }
 
 #[derive(Clone, Copy)]
@@ -190,6 +193,7 @@ const SETTINGS: &[Entry] = &[
     app(&network::INFO, AppId::Network),
     item("Battery saver", Action::BatterySaver),
     app(&volume::INFO, AppId::Volume),
+    Entry { name: "Check for update", needs_network: true, action: Action::CheckUpdate, confirm: false },
     Entry { name: "Clear photo cache", needs_network: true, action: Action::ClearPhotoCache, confirm: true },
     danger("Reboot", Action::Reboot),
 ];
@@ -227,6 +231,9 @@ pub struct Shell {
     notice: Option<(&'static str, u32)>,
     /// An entry waiting for a second L.
     confirming: Option<Entry>,
+    /// The update check state last shown, while one is in progress.
+    #[cfg(feature = "wifi")]
+    ota_shown: Option<crate::agent::OtaState>,
     /// True while the right LED is pulsing for unread messages.
     cue_on: bool,
     /// Last frame with a key held, for the idle return to Hoot.
@@ -273,6 +280,8 @@ impl Shell {
             pending_reset: None,
             notice: None,
             confirming: None,
+            #[cfg(feature = "wifi")]
+            ota_shown: None,
             cue_on: false,
             last_input_ms: 0,
             hoot: HootApp::new(),
@@ -453,6 +462,25 @@ impl Shell {
 
         self.message_cue(ctx);
 
+        // A menu-started update check reports back through a notice.
+        #[cfg(feature = "wifi")]
+        if let Some(shown) = self.ota_shown {
+            use crate::agent::OtaState;
+            let state = crate::agent::ota_state();
+            if state != shown {
+                let text = match state {
+                    OtaState::UpToDate => Some("Up to date"),
+                    OtaState::Downloading => Some("Downloading update..."),
+                    OtaState::Failed => Some("Could not check for updates"),
+                    OtaState::Checking | OtaState::Idle => None,
+                };
+                if let Some(text) = text {
+                    self.notice = Some((text, ctx.now_ms.wrapping_add(if state == OtaState::Downloading { 60_000 } else { 2_500 })));
+                }
+                self.ota_shown = if matches!(state, OtaState::UpToDate | OtaState::Failed) { None } else { Some(state) };
+            }
+        }
+
         // Timers keep time off screen, and Hoot lives on.
         let launchers = APPS.iter().map(|(_, e)| e).chain(MAIN.iter()).chain(SETTINGS.iter());
         for entry in launchers {
@@ -625,6 +653,13 @@ impl Shell {
                 Action::RebootToUsb => {
                     info!("reboot to USB requested");
                     self.pending_reset = Some(PendingReset::Usb);
+                }
+                #[cfg(feature = "wifi")]
+                Action::CheckUpdate => {
+                    info!("update check requested from the menu");
+                    crate::agent::request_update_check();
+                    self.ota_shown = Some(crate::agent::OtaState::Checking);
+                    self.notice = Some(("Checking for update...", ctx.now_ms.wrapping_add(4_000)));
                 }
                 Action::FactoryReset => {
                     warn!("factory reset");

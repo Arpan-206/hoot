@@ -147,7 +147,7 @@ submenus from that. A group with nothing usable on the board is hidden.
 | Frame | Photo frame, Messages, Slideshow, Weather |
 | Fun | Fireplace, Aquarium, Sounds, Snake |
 | Tools | Pomodoro, Stopwatch, Clock, Alarm, Bedside |
-| Settings | Network, Battery saver, Volume, Clear photo cache, Reboot |
+| Settings | Network, Battery saver, Volume, Check for update, Clear photo cache, Reboot |
 | Developer | Input test, LEDs & backlight, Display test, Speaker test, Reboot to USB, Factory reset |
 
 Anything hard to undo asks first: a second L confirms, J backs out.
@@ -184,6 +184,7 @@ Messages also shows next to Frame on the top menu.
 | Fireplace | W/S | More or less fuel |
 | Network (Pico W only) | L or D | Connect to Wi-Fi |
 | Network (Pico W only) | K | Open the setup hotspot |
+| Settings: Check for update | L | Ask the server now; says up to date, downloading, or that it could not check |
 | Settings: Clear photo cache | L, then L | Erase both photo slots and the stored timestamp |
 | Settings: Battery saver | L | Cycle auto, on, off |
 | Settings: Volume | A/D or W/S, L | Set the level from 0 to 10, play the chime |

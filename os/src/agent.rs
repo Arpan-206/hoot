@@ -10,7 +10,7 @@
 //! rebooting into it. All requests use the system lane of the network
 //! service, so an app can never block them.
 
-use portable_atomic::{AtomicU8, AtomicU32, Ordering};
+use portable_atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 
 use crate::VERSION;
 use crate::apps::photo_frame;
@@ -43,6 +43,40 @@ static TRIAL_STARTED_MS: AtomicU32 = AtomicU32::new(0);
 /// countdown starts now.
 pub fn note_server_change(now_ms: u32) {
     TRIAL_STARTED_MS.store(now_ms, Ordering::Relaxed);
+}
+
+/// Where the update check stands, for the menu.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[repr(u8)]
+pub enum OtaState {
+    Idle = 0,
+    Checking = 1,
+    UpToDate = 2,
+    Downloading = 3,
+    Failed = 4,
+}
+
+static OTA_STATE: AtomicU8 = AtomicU8::new(OtaState::Idle as u8);
+static CHECK_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+fn set_ota(state: OtaState) {
+    OTA_STATE.store(state as u8, Ordering::Relaxed);
+}
+
+pub fn ota_state() -> OtaState {
+    match OTA_STATE.load(Ordering::Relaxed) {
+        1 => OtaState::Checking,
+        2 => OtaState::UpToDate,
+        3 => OtaState::Downloading,
+        4 => OtaState::Failed,
+        _ => OtaState::Idle,
+    }
+}
+
+/// The menu asked for an update check.
+pub fn request_update_check() {
+    CHECK_REQUESTED.store(true, Ordering::Relaxed);
+    set_ota(OtaState::Checking);
 }
 
 pub fn unread() -> u8 {
@@ -131,6 +165,10 @@ impl Agent {
         }
 
         self.check_server_trial(net, store, now);
+        if CHECK_REQUESTED.swap(false, Ordering::Relaxed) {
+            self.check_update = true;
+            self.next_ota_ms = now;
+        }
 
         if self.job != Job::None {
             match net.take_job_on(Lane::System) {
@@ -148,6 +186,9 @@ impl Agent {
                     let job = core::mem::replace(&mut self.job, Job::None);
                     self.fails = self.fails.saturating_add(1);
                     warn!("agent: request failed: {} (failure {})", e.label(), self.fails);
+                    if matches!(job, Job::Version | Job::Firmware) {
+                        set_ota(OtaState::Failed);
+                    }
                     if job == Job::Heartbeat {
                         self.next_poll_ms = now.wrapping_add(RETRY_MS);
                     }
@@ -274,6 +315,7 @@ impl Agent {
         self.check_update = false;
         self.next_ota_ms = now.wrapping_add(OTA_EVERY_MS);
         info!("ota: checking {}", request.url.as_str());
+        set_ota(OtaState::Checking);
         self.start(net, Job::Version, request);
     }
 
@@ -390,6 +432,7 @@ impl Agent {
     fn finish_version(&mut self, net: &mut NetHandle, store: &Storage, r: FetchResult) {
         if r.status != 200 {
             info!("ota: no version file (HTTP {})", r.status);
+            set_ota(OtaState::Failed);
             return;
         }
         let differs = net.small_body_on(Lane::System, |body| {
@@ -398,7 +441,10 @@ impl Agent {
             !published.is_empty() && published != VERSION
         });
         if differs {
+            set_ota(OtaState::Downloading);
             self.start_firmware(net, store);
+        } else {
+            set_ota(OtaState::UpToDate);
         }
     }
 
@@ -408,5 +454,6 @@ impl Agent {
             cortex_m::peripheral::SCB::sys_reset();
         }
         warn!("ota: download failed (HTTP {}, {} bytes)", r.status, r.len);
+        set_ota(OtaState::Failed);
     }
 }
