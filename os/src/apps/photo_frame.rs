@@ -49,7 +49,9 @@ const SLOT_A: u8 = 0;
 const SLOT_B: u8 = 1;
 /// How often the motion plays, how long to wait after a failed play, and
 /// how long the last frame holds before the still returns.
-const LIVE_EVERY_MS: u32 = 45_000;
+/// Rare on its own: each play is 400 KiB from the server, and a free
+/// server has a small monthly allowance. K plays it any time.
+const LIVE_EVERY_MS: u32 = 10 * 60_000;
 const LIVE_RETRY_MS: u32 = 300_000;
 const LIVE_HOLD_MS: u32 = 500;
 

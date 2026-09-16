@@ -350,8 +350,8 @@ photo, which hides its clip inside the JPEG, is found on its own. The
 server pulls ten frames out of the clip with ffmpeg, framed like the
 still, and answers the frame poll with `X-Sprig-Live: 10`.
 
-While online, the photo frame plays the frames every 45 seconds, or when
-you press K: each one
+While online, the photo frame plays the frames every ten minutes, or
+whenever you press K: each one
 is fetched straight into a spare screen buffer in RAM and shown, then the
 still comes back from flash. The pace is the network's, a few frames a
 second. Offline, or in battery saver, the still is all there is. A plain

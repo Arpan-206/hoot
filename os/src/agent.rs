@@ -29,6 +29,9 @@ const RETRY_MS: u32 = 15_000;
 const OTA_FIRST_MS: u32 = 60_000;
 const OTA_EVERY_MS: u32 = 6 * 60 * 60 * 1000;
 const LOG_POST_MS: u32 = 60_000;
+/// A new server or name has this long to answer a heartbeat before the
+/// device goes back to the old ones.
+const SERVER_TRIAL_MS: u32 = 30 * 60_000;
 
 /// Unread messages waiting on the server, from the last heartbeat.
 static UNREAD: AtomicU8 = AtomicU8::new(0);
@@ -65,6 +68,8 @@ pub struct Agent {
     fails: u8,
     /// A heartbeat has been answered since boot: the server is reachable.
     heartbeat_ok: bool,
+    /// Uptime when a server trial began, for boards without a clock.
+    trial_started_ms: u32,
 }
 
 fn due(now: u32, at: u32) -> bool {
@@ -94,6 +99,7 @@ impl Agent {
             fetch_goals: false,
             goals_stamp: 0,
             heartbeat_ok: false,
+            trial_started_ms: 0,
             fails: 0,
         }
     }
@@ -117,6 +123,8 @@ impl Agent {
                 net.request_connect();
             }
         }
+
+        self.check_server_trial(net, store, now);
 
         if self.job != Job::None {
             match net.take_job_on(Lane::System) {
@@ -155,6 +163,37 @@ impl Agent {
         } else if crate::logging::unsent() > 0 && due(now, self.next_log_ms) {
             self.start_warnings(net, store, now);
         }
+    }
+
+    /// A new server or name is on trial. Give it up when the time is over
+    /// and no heartbeat got through: back to the previous settings.
+    fn check_server_trial(&mut self, net: &mut NetHandle, store: &mut Storage, now: u32) {
+        let until = store.config().server_trial_until;
+        if until == 0 {
+            return;
+        }
+        let expired = match clock::now_secs(now) {
+            Some(secs) if until > 1 => secs >= until,
+            _ => now.wrapping_sub(self.trial_started_ms) >= SERVER_TRIAL_MS,
+        };
+        if !expired {
+            return;
+        }
+        warn!("agent: new server never answered; going back to the old one");
+        let _ = store.update_config(|c| {
+            if !c.prev_server.is_empty() {
+                c.frame_server = c.prev_server;
+            }
+            if !c.prev_name.is_empty() {
+                c.frame_name = c.prev_name;
+            }
+            c.prev_server.clear();
+            c.prev_name.clear();
+            c.server_trial_until = 0;
+            c.frame_last_modified.clear();
+        });
+        net.apply_config(store.config());
+        self.next_poll_ms = now.wrapping_add(2_000);
     }
 
     fn start(&mut self, net: &mut NetHandle, job: Job, request: FetchRequest) {
@@ -245,6 +284,14 @@ impl Agent {
         } else {
             self.fails = 0;
             self.heartbeat_ok = true;
+            if store.config().server_trial_until != 0 {
+                info!("agent: the new server answers; change confirmed");
+                let _ = store.update_config(|c| {
+                    c.prev_server.clear();
+                    c.prev_name.clear();
+                    c.server_trial_until = 0;
+                });
+            }
             set_unread(r.unread);
             if r.goals_stamp != 0 && r.goals_stamp != store.config().goals_stamp {
                 self.goals_stamp = r.goals_stamp;
@@ -271,14 +318,28 @@ impl Agent {
             return;
         }
         // Remote service: move the device to another server, rename it,
-        // or give it a key. The photo is fetched afresh afterwards.
+        // or give it a key. The photo is fetched afresh afterwards. A new
+        // server or name is on trial: see `check_server_trial`.
+        let trial_until = clock::now_secs(now).map_or(1, |s| s + SERVER_TRIAL_MS / 1000);
         if let Some(v) = command.strip_prefix("server:") {
+            self.trial_started_ms = now;
             let _ = store.update_config(|c| {
+                if c.server_trial_until == 0 {
+                    c.prev_server = c.frame_server;
+                    c.prev_name = c.frame_name;
+                }
+                c.server_trial_until = trial_until;
                 c.frame_server.set(v.trim());
                 c.frame_last_modified.clear();
             });
         } else if let Some(v) = command.strip_prefix("name:") {
+            self.trial_started_ms = now;
             let _ = store.update_config(|c| {
+                if c.server_trial_until == 0 {
+                    c.prev_server = c.frame_server;
+                    c.prev_name = c.frame_name;
+                }
+                c.server_trial_until = trial_until;
                 c.frame_name.set(v.trim());
                 c.frame_last_modified.clear();
             });

@@ -190,6 +190,7 @@ pub struct PortalResult {
     pub password: FixedStr<64>,
     pub server: FixedStr<96>,
     pub name: FixedStr<24>,
+    pub key: FixedStr<32>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

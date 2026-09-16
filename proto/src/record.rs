@@ -103,6 +103,14 @@ pub struct Config {
     /// Sent as `X-Sprig-Key` on every request, so a public server can tell
     /// this device from anyone else. Empty = none.
     pub device_key: FixedStr<32>,
+    /// Where the device came from before a `server:` or `name:` command.
+    /// Kept until the new server answers; the device goes back to these if
+    /// it never does. Empty = no change on trial.
+    pub prev_server: FixedStr<96>,
+    pub prev_name: FixedStr<24>,
+    /// Local seconds when the trial of a new server ends; 1 = the clock was
+    /// unknown when it began, so count uptime instead; 0 = no trial.
+    pub server_trial_until: u32,
 }
 
 pub const POWER_AUTO: u8 = 0;
@@ -119,10 +127,10 @@ const VERSION: u16 = 1;
 /// Encoded size in bytes: header, payload, CRC. Fields added later sit at
 /// the end of the payload; older, shorter records still decode and the
 /// missing fields take their defaults. Never reorder or remove a field.
-pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 33 + 5 * (GOAL_NAME_MAX + 1) + 4 + 2 + 33 + 4;
+pub const RECORD_LEN: usize = 12 + (33 + 65 + 97 + 25 + 41) + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 33 + 5 * (GOAL_NAME_MAX + 1) + 4 + 2 + 33 + 97 + 25 + 4 + 4;
 /// Bytes after `poll_secs`, added by later firmware one at a time.
 #[cfg(test)]
-const TRAILING_LEN: usize = 1 + 1 + 2 + 1 + 1 + 33 + 5 * (GOAL_NAME_MAX + 1) + 4 + 2 + 33;
+const TRAILING_LEN: usize = 1 + 1 + 2 + 1 + 1 + 33 + 5 * (GOAL_NAME_MAX + 1) + 4 + 2 + 33 + 97 + 25 + 4;
 const HEADER_LEN: usize = 12;
 const CRC_LEN: usize = 4;
 
@@ -240,6 +248,9 @@ pub fn encode(cfg: &Config, seq: u32, out: &mut [u8]) -> Option<usize> {
     c.put(&cfg.goals_stamp.to_le_bytes())?;
     c.put(&cfg.snake_best.to_le_bytes())?;
     c.put_str(&cfg.device_key)?;
+    c.put_str(&cfg.prev_server)?;
+    c.put_str(&cfg.prev_name)?;
+    c.put(&cfg.server_trial_until.to_le_bytes())?;
     let body_len = c.pos;
     let crc = crc32(&c.buf[..body_len]);
     c.put(&crc.to_le_bytes())?;
@@ -290,6 +301,9 @@ pub fn decode(buf: &[u8]) -> Option<(Config, u32)> {
         goals_stamp: r.u32().unwrap_or(0),
         snake_best: r.u16().unwrap_or(0),
         device_key: r.str().unwrap_or_default(),
+        prev_server: r.str().unwrap_or_default(),
+        prev_name: r.str().unwrap_or_default(),
+        server_trial_until: r.u32().unwrap_or(0),
     };
     Some((cfg, seq))
 }
@@ -330,13 +344,15 @@ mod tests {
         c.goals_stamp = 77;
         c.snake_best = 42;
         c.device_key.set("k3y-for-tests");
+        c.prev_server.set("http://old.example");
+        c.server_trial_until = 1_789_400_000;
         c
     }
 
     /// A record as the first firmware wrote it: same layout without the
     /// trailing bytes later versions added, with its own length and CRC.
     fn older_record(cfg: &Config, seq: u32) -> Vec<u8> {
-        let mut buf = [0u8; 512];
+        let mut buf = [0u8; 1024];
         let n = encode(cfg, seq, &mut buf).unwrap();
         let mut old = buf[..n - CRC_LEN - TRAILING_LEN].to_vec(); // drop the newer fields and the CRC
         let len = (old.len() + CRC_LEN) as u16;
@@ -364,11 +380,12 @@ mod tests {
         assert_eq!(cfg.goals_stamp, 0);
         assert_eq!(cfg.snake_best, 0);
         assert!(cfg.device_key.is_empty());
+        assert!(cfg.prev_server.is_empty() && cfg.server_trial_until == 0);
     }
 
     #[test]
     fn round_trip() {
-        let mut buf = [0u8; 512];
+        let mut buf = [0u8; 1024];
         let n = encode(&sample(), 42, &mut buf).unwrap();
         assert_eq!(n, RECORD_LEN);
         let (back, seq) = decode(&buf[..n]).unwrap();
@@ -378,7 +395,7 @@ mod tests {
 
     #[test]
     fn detects_corruption() {
-        let mut buf = [0u8; 512];
+        let mut buf = [0u8; 1024];
         let n = encode(&sample(), 1, &mut buf).unwrap();
         buf[20] ^= 0x01;
         assert!(decode(&buf[..n]).is_none());
