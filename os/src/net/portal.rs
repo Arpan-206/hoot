@@ -49,14 +49,14 @@ pub async fn run(control: &mut Control<'_>, stack: Stack<'_>) -> Option<PortalRe
     }));
     info!("portal: hotspot '{}' up at 192.168.4.1", PORTAL_SSID);
 
-    let (server, name) = with(|s| (s.server, s.name));
+    let (server, name, key) = with(|s| (s.server, s.name, s.key));
     // Phones probe with several connections at once and open the page right
     // after the probe. Three web server sockets keep none of them waiting.
     let found = &networks[..count];
     let web = select3(
-        serve_http(stack, found, server, name),
-        serve_http(stack, found, server, name),
-        serve_http(stack, found, server, name),
+        serve_http(stack, found, server, name, key),
+        serve_http(stack, found, server, name, key),
+        serve_http(stack, found, server, name, key),
     );
     let servers = select3(dhcp::serve(stack), dns::serve(stack), web);
     let result = match with_timeout(PORTAL_TIMEOUT, servers).await {
@@ -104,6 +104,7 @@ async fn serve_http(
     networks: &[Network],
     server: FixedStr<96>,
     name: FixedStr<24>,
+    key: FixedStr<32>,
 ) -> PortalResult {
     let mut rx = [0u8; 2048];
     let mut tx = [0u8; 2048];
@@ -116,7 +117,7 @@ async fn serve_http(
             Timer::after_millis(100).await;
             continue;
         }
-        let outcome = handle(&mut sock, &mut head, networks, &server, &name).await;
+        let outcome = handle(&mut sock, &mut head, networks, &server, &name, &key).await;
         finish(&mut sock).await;
         if let Some(result) = outcome {
             return result;
@@ -131,6 +132,7 @@ async fn handle(
     networks: &[Network],
     server: &FixedStr<96>,
     name: &FixedStr<24>,
+    key: &FixedStr<32>,
 ) -> Option<PortalResult> {
     let mut filled = 0;
     let head_end = loop {
@@ -153,7 +155,7 @@ async fn handle(
 
     match (is_post, path.as_str()) {
         (false, "/") => {
-            send_page(sock, networks, server, name).await;
+            send_page(sock, networks, server, name, key).await;
             None
         }
         (true, "/save") => {
@@ -177,6 +179,7 @@ async fn handle(
                 password: FixedStr::new(),
                 server: *server,
                 name: *name,
+                key: *key,
             };
             form::fields(text, |key, value| match key {
                 "ssid" => {
@@ -196,10 +199,13 @@ async fn handle(
                 "name" => {
                     result.name.set(value.trim());
                 }
+                "key" => {
+                    result.key.set(value.trim());
+                }
                 _ => {}
             });
             if result.ssid.is_empty() {
-                send_page(sock, networks, server, name).await;
+                send_page(sock, networks, server, name, key).await;
                 return None;
             }
             send_saved(sock, result.ssid.as_str()).await;
@@ -216,9 +222,16 @@ async fn handle(
 const PAGE_HEAD: &str = "<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Hoot setup</title><style>body{font-family:system-ui,sans-serif;margin:0;background:#12142b;color:#f4ebd0}.w{max-width:420px;margin:0 auto;padding:20px}h1{color:#f2b84b;font-size:22px;margin:0 0 4px}p{color:#8e93b4;margin:0 0 12px}label{display:block;margin:14px 0 6px;color:#8e93b4}input{width:100%;padding:12px;font-size:16px;border-radius:8px;border:1px solid #2f3560;background:#1e2242;color:#f4ebd0;box-sizing:border-box}button{width:100%;padding:14px;margin-top:18px;font-size:16px;border:0;border-radius:8px;background:#f2b84b;color:#12142b;font-weight:600}.n{display:block;width:100%;text-align:left;margin:6px 0;padding:10px 12px;background:#1e2242;color:#f4ebd0;border:1px solid #2f3560;border-radius:8px;font-weight:400}</style></head><body><div class=w><h1>Hoot setup</h1><p>Pick your Wi-Fi and save. Hoot connects by itself.</p><form method=post action=/save><label>Wi-Fi network</label><input name=ssid id=ssid required autocomplete=off><div>";
 const PAGE_MID_A: &str = "</div><label>Password</label><input name=password type=password autocomplete=off><label>Photo server</label><input name=server value=\"";
 const PAGE_MID_B: &str = "\"><label>Frame name</label><input name=name value=\"";
+const PAGE_MID_C: &str = "\"><label>Device key (from the frame server)</label><input name=key autocomplete=off value=\"";
 const PAGE_TAIL: &str = "\"><button>Save and connect</button></form></div><script>for(const b of document.querySelectorAll('.n'))b.onclick=e=>{e.preventDefault();ssid.value=b.textContent}</script></body></html>";
 
-async fn send_page(sock: &mut TcpSocket<'_>, networks: &[Network], server: &FixedStr<96>, name: &FixedStr<24>) {
+async fn send_page(
+    sock: &mut TcpSocket<'_>,
+    networks: &[Network],
+    server: &FixedStr<96>,
+    name: &FixedStr<24>,
+    key: &FixedStr<32>,
+) {
     // Network buttons, HTML-escaped, as many as fit.
     let mut list = [0u8; 1024];
     let mut list_len = 0;
@@ -242,12 +255,22 @@ async fn send_page(sock: &mut TcpSocket<'_>, networks: &[Network], server: &Fixe
     let server_len = form::html_escape(server.as_str(), &mut server_esc).unwrap_or(0);
     let mut name_esc = [0u8; 64];
     let name_len = form::html_escape(name.as_str(), &mut name_esc).unwrap_or(0);
+    let mut key_esc = [0u8; 80];
+    let key_len = form::html_escape(key.as_str(), &mut key_esc).unwrap_or(0);
 
-    let total = PAGE_HEAD.len() + list_len + PAGE_MID_A.len() + server_len + PAGE_MID_B.len() + name_len + PAGE_TAIL.len();
+    let total = PAGE_HEAD.len()
+        + list_len
+        + PAGE_MID_A.len()
+        + server_len
+        + PAGE_MID_B.len()
+        + name_len
+        + PAGE_MID_C.len()
+        + key_len
+        + PAGE_TAIL.len();
     let header: StrBuf<160> = format(format_args!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {total}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n"
     ));
-    let parts: [&[u8]; 7] = [
+    let parts: [&[u8]; 9] = [
         header.as_str().as_bytes(),
         PAGE_HEAD.as_bytes(),
         &list[..list_len],
@@ -255,6 +278,8 @@ async fn send_page(sock: &mut TcpSocket<'_>, networks: &[Network], server: &Fixe
         &server_esc[..server_len],
         PAGE_MID_B.as_bytes(),
         &name_esc[..name_len],
+        PAGE_MID_C.as_bytes(),
+        &key_esc[..key_len],
     ];
     for part in parts {
         if sock.write_all(part).await.is_err() {

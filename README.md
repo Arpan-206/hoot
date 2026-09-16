@@ -413,6 +413,9 @@ The Sprig sets itself up the way the ESP32 frame does, without a rebuild.
 4. Pick your network from the list, type the password, check the photo
    server and frame name, tap Save.
 
+The page also holds the photo server, the frame name and the device key,
+so a frame can be pointed at a new server by hand. A changed server or
+name is on trial for thirty minutes, as with the remote command.
 The Sprig stores the settings, closes the hotspot and joins your network.
 The hotspot gives up after five minutes and retries the saved network.
 

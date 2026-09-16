@@ -10,7 +10,7 @@
 //! rebooting into it. All requests use the system lane of the network
 //! service, so an app can never block them.
 
-use portable_atomic::{AtomicU8, Ordering};
+use portable_atomic::{AtomicU8, AtomicU32, Ordering};
 
 use crate::VERSION;
 use crate::apps::photo_frame;
@@ -35,6 +35,15 @@ const SERVER_TRIAL_MS: u32 = 30 * 60_000;
 
 /// Unread messages waiting on the server, from the last heartbeat.
 static UNREAD: AtomicU8 = AtomicU8::new(0);
+/// Uptime when a new server or name went on trial; for the countdown on
+/// a board whose clock is unknown. Zero = boot.
+static TRIAL_STARTED_MS: AtomicU32 = AtomicU32::new(0);
+
+/// The server or name was just changed (command or portal): the trial
+/// countdown starts now.
+pub fn note_server_change(now_ms: u32) {
+    TRIAL_STARTED_MS.store(now_ms, Ordering::Relaxed);
+}
 
 pub fn unread() -> u8 {
     UNREAD.load(Ordering::Relaxed)
@@ -68,8 +77,6 @@ pub struct Agent {
     fails: u8,
     /// A heartbeat has been answered since boot: the server is reachable.
     heartbeat_ok: bool,
-    /// Uptime when a server trial began, for boards without a clock.
-    trial_started_ms: u32,
 }
 
 fn due(now: u32, at: u32) -> bool {
@@ -99,7 +106,6 @@ impl Agent {
             fetch_goals: false,
             goals_stamp: 0,
             heartbeat_ok: false,
-            trial_started_ms: 0,
             fails: 0,
         }
     }
@@ -174,7 +180,7 @@ impl Agent {
         }
         let expired = match clock::now_secs(now) {
             Some(secs) if until > 1 => secs >= until,
-            _ => now.wrapping_sub(self.trial_started_ms) >= SERVER_TRIAL_MS,
+            _ => now.wrapping_sub(TRIAL_STARTED_MS.load(Ordering::Relaxed)) >= SERVER_TRIAL_MS,
         };
         if !expired {
             return;
@@ -322,7 +328,7 @@ impl Agent {
         // server or name is on trial: see `check_server_trial`.
         let trial_until = clock::now_secs(now).map_or(1, |s| s + SERVER_TRIAL_MS / 1000);
         if let Some(v) = command.strip_prefix("server:") {
-            self.trial_started_ms = now;
+            note_server_change(now);
             let _ = store.update_config(|c| {
                 if c.server_trial_until == 0 {
                     c.prev_server = c.frame_server;
@@ -333,7 +339,7 @@ impl Agent {
                 c.frame_last_modified.clear();
             });
         } else if let Some(v) = command.strip_prefix("name:") {
-            self.trial_started_ms = now;
+            note_server_change(now);
             let _ = store.update_config(|c| {
                 if c.server_trial_until == 0 {
                     c.prev_server = c.frame_server;

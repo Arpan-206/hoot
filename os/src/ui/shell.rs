@@ -402,15 +402,29 @@ impl Shell {
         // Settings saved on the setup portal page become the stored config.
         #[cfg(feature = "wifi")]
         if let Some(saved) = ctx.net.take_portal_result() {
+            let moved = ctx.store.config().frame_server != saved.server || ctx.store.config().frame_name != saved.name;
+            let trial_until = crate::clock::now_secs(ctx.now_ms).map_or(1, |s| s + 30 * 60);
             let outcome = ctx.store.update_config(|c| {
                 c.wifi_ssid = saved.ssid;
                 c.wifi_password = saved.password;
-                if c.frame_server != saved.server || c.frame_name != saved.name {
+                c.device_key = saved.key;
+                if moved {
+                    // On trial like a server: command: back to these if the
+                    // new ones never answer.
+                    if c.server_trial_until == 0 {
+                        c.prev_server = c.frame_server;
+                        c.prev_name = c.frame_name;
+                    }
+                    c.server_trial_until = trial_until;
                     c.frame_last_modified.clear();
                 }
                 c.frame_server = saved.server;
                 c.frame_name = saved.name;
             });
+            if moved {
+                crate::agent::note_server_change(ctx.now_ms);
+            }
+            ctx.net.apply_config(ctx.store.config());
             info!("settings from portal stored: {:?}", outcome.is_ok());
             if self.running.is_none() {
                 self.notice = Some(("Settings saved", ctx.now_ms.wrapping_add(NOTICE_MS)));
