@@ -112,6 +112,8 @@ enum Action {
     BatterySaver,
     Reboot,
     RebootToUsb,
+    /// Built-in config back, every blob slot emptied, then a reboot.
+    FactoryReset,
 }
 
 #[derive(Clone, Copy)]
@@ -119,14 +121,21 @@ struct Entry {
     name: &'static str,
     needs_network: bool,
     action: Action,
+    /// Ask "are you sure?" before doing it.
+    confirm: bool,
 }
 
 const fn app(info: &'static AppInfo, id: AppId) -> Entry {
-    Entry { name: info.name, needs_network: info.needs_network, action: Action::Launch(id) }
+    Entry { name: info.name, needs_network: info.needs_network, action: Action::Launch(id), confirm: false }
 }
 
 const fn item(name: &'static str, action: Action) -> Entry {
-    Entry { name, needs_network: false, action }
+    Entry { name, needs_network: false, action, confirm: false }
+}
+
+/// Something hard to undo: it asks first.
+const fn danger(name: &'static str, action: Action) -> Entry {
+    Entry { name, needs_network: false, action, confirm: true }
 }
 
 const fn group(g: Group) -> Entry {
@@ -181,17 +190,20 @@ const SETTINGS: &[Entry] = &[
     app(&network::INFO, AppId::Network),
     item("Battery saver", Action::BatterySaver),
     app(&volume::INFO, AppId::Volume),
-    Entry { name: "Clear photo cache", needs_network: true, action: Action::ClearPhotoCache },
-    item("Reboot", Action::Reboot),
-    item("Reboot to USB", Action::RebootToUsb),
+    Entry { name: "Clear photo cache", needs_network: true, action: Action::ClearPhotoCache, confirm: true },
+    danger("Reboot", Action::Reboot),
 ];
 #[cfg(not(feature = "wifi"))]
 const SETTINGS: &[Entry] = &[
     item("Battery saver", Action::BatterySaver),
     app(&volume::INFO, AppId::Volume),
-    item("Reboot", Action::Reboot),
-    item("Reboot to USB", Action::RebootToUsb),
+    danger("Reboot", Action::Reboot),
 ];
+
+/// Under Developer, after the test screens: the ways to break things,
+/// each behind a confirmation.
+const DEVELOPER_ITEMS: &[Entry] =
+    &[danger("Reboot to USB", Action::RebootToUsb), danger("Factory reset", Action::FactoryReset)];
 
 /// A reset that happens on the next frame, after its notice was drawn.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -213,6 +225,8 @@ pub struct Shell {
     running: Option<AppId>,
     pending_reset: Option<PendingReset>,
     notice: Option<(&'static str, u32)>,
+    /// An entry waiting for a second L.
+    confirming: Option<Entry>,
     /// True while the right LED is pulsing for unread messages.
     cue_on: bool,
     /// Last frame with a key held, for the idle return to Hoot.
@@ -258,6 +272,7 @@ impl Shell {
             running: None,
             pending_reset: None,
             notice: None,
+            confirming: None,
             cue_on: false,
             last_input_ms: 0,
             hoot: HootApp::new(),
@@ -306,6 +321,11 @@ impl Shell {
             Menu::Group(g) => {
                 for (_, entry) in APPS.iter().filter(|(gg, e)| *gg == g && usable(e, has_radio)) {
                     push(entry);
+                }
+                if g == Group::Developer {
+                    for entry in DEVELOPER_ITEMS {
+                        push(entry);
+                    }
                 }
             }
             Menu::Main | Menu::Settings => {
@@ -494,7 +514,10 @@ impl Shell {
         match self.pending_reset {
             Some(PendingReset::Usb) => self.draw_notice(ctx, "USB flash mode"),
             Some(PendingReset::Normal) => self.draw_notice(ctx, "Rebooting..."),
-            None => self.draw_menu(ctx),
+            None => match self.confirming {
+                Some(entry) => self.draw_confirm(ctx, entry),
+                None => self.draw_menu(ctx),
+            },
         }
     }
 
@@ -532,12 +555,32 @@ impl Shell {
         }
         self.scroll_to_selected();
 
+        if let Some(entry) = self.confirming {
+            if select {
+                self.confirming = None;
+                self.perform(ctx, entry);
+            } else if back {
+                self.confirming = None;
+            }
+            return;
+        }
         if back && self.current != Menu::Main {
             self.open(Menu::Main, self.main_selected);
             return;
         }
         if select && self.len > 0 {
             let entry = self.entries[self.selected];
+            if entry.confirm {
+                self.confirming = Some(entry);
+                return;
+            }
+            self.perform(ctx, entry);
+        }
+    }
+
+    /// Carry out a menu entry.
+    fn perform(&mut self, ctx: &mut Ctx, entry: Entry) {
+        {
             match entry.action {
                 Action::Launch(id) => {
                     info!("open app: {}", entry.name);
@@ -582,6 +625,11 @@ impl Shell {
                 Action::RebootToUsb => {
                     info!("reboot to USB requested");
                     self.pending_reset = Some(PendingReset::Usb);
+                }
+                Action::FactoryReset => {
+                    warn!("factory reset");
+                    let _ = ctx.store.factory_reset();
+                    self.pending_reset = Some(PendingReset::Normal);
                 }
             }
         }
@@ -637,6 +685,23 @@ impl Shell {
         }
         let hint = if self.current == Menu::Main { "W/S move    L select" } else { "L select    J back" };
         theme::footer(fb, hint);
+    }
+
+    /// "Are you sure?" for an entry that is hard to undo.
+    fn draw_confirm(&self, ctx: &mut Ctx, entry: Entry) {
+        let fb = &mut *ctx.fb;
+        theme::screen(fb, self.current.title(), "");
+        let q: StrBuf<26> = format(format_args!("{}?", entry.name));
+        fb.draw_text_centered(40, q.as_str(), theme::TEXT, None, 1);
+        let note = match entry.action {
+            Action::FactoryReset => "Wi-Fi, server, Hoot: gone.",
+            Action::RebootToUsb => "Dark until USB reflash.",
+            #[cfg(feature = "wifi")]
+            Action::ClearPhotoCache => "The photo is fetched anew.",
+            _ => "Are you sure?",
+        };
+        fb.draw_text_centered(58, note, theme::MUTED, None, 1);
+        theme::footer(fb, "L yes   J no");
     }
 
     fn draw_notice(&self, ctx: &mut Ctx, text: &str) {

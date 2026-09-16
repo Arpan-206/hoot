@@ -61,14 +61,25 @@ pub fn xip(offset: u32, len: usize) -> &'static [u8] {
 pub struct Storage {
     flash: &'static FlashMutex,
     config: Config,
+    defaults: Config,
     seq: u32,
 }
 
 impl Storage {
     /// Load the config from flash, or start from `defaults` if none is valid.
     pub fn new(flash: &'static FlashMutex, defaults: Config) -> Self {
-        let (config, seq) = config::load().unwrap_or((defaults, 0));
-        Self { flash, config, seq }
+        let (config, seq) = config::load().unwrap_or((defaults.clone(), 0));
+        Self { flash, config, defaults, seq }
+    }
+
+    /// Back to the way it left the workshop: the built-in config (Wi-Fi,
+    /// server, name, Hoot, all of it) and every blob slot emptied.
+    pub fn factory_reset(&mut self) -> Result<(), StorageError> {
+        for slot in 0..crate::board::flash_map::BLOB_SLOTS {
+            self.blob_erase(slot)?;
+        }
+        let defaults = self.defaults.clone();
+        self.update_config(|c| *c = defaults)
     }
 
     pub fn config(&self) -> &Config {

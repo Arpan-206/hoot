@@ -147,8 +147,12 @@ submenus from that. A group with nothing usable on the board is hidden.
 | Frame | Photo frame, Messages, Slideshow, Weather |
 | Fun | Fireplace, Aquarium, Sounds, Snake |
 | Tools | Pomodoro, Stopwatch, Clock, Alarm, Bedside |
-| Settings | Network, Battery saver, Volume, Clear photo cache, Reboot, Reboot to USB |
-| Developer | Input test, LEDs & backlight, Display test, Speaker test |
+| Settings | Network, Battery saver, Volume, Clear photo cache, Reboot |
+| Developer | Input test, LEDs & backlight, Display test, Speaker test, Reboot to USB, Factory reset |
+
+Anything hard to undo asks first: a second L confirms, J backs out.
+Reboot to USB and Factory reset live under Developer, two levels down, so
+nobody browsing the menus lands on them by accident.
 
 Frame and its apps exist only in Wi-Fi builds. The unread count for
 Messages also shows next to Frame on the top menu.
@@ -180,11 +184,12 @@ Messages also shows next to Frame on the top menu.
 | Fireplace | W/S | More or less fuel |
 | Network (Pico W only) | L or D | Connect to Wi-Fi |
 | Network (Pico W only) | K | Open the setup hotspot |
-| Settings: Clear photo cache | L | Erase both photo slots and the stored timestamp |
+| Settings: Clear photo cache | L, then L | Erase both photo slots and the stored timestamp |
 | Settings: Battery saver | L | Cycle auto, on, off |
 | Settings: Volume | A/D or W/S, L | Set the level from 0 to 10, play the chime |
-| Settings: Reboot | L | Normal reset |
-| Settings: Reboot to USB | L | Reset into the USB flash mode |
+| Settings: Reboot | L, then L | Normal reset |
+| Developer: Reboot to USB | L, then L | Reset into the USB flash mode |
+| Developer: Factory reset | L, then L | Built-in settings back, photos and Hoot wiped, reboot |
 
 ## First boot checklist
 

@@ -10,7 +10,8 @@ use crate::pet::{GOAL_NAME_MAX, Pet};
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FixedStr<const N: usize> {
     buf: [u8; N],
-    len: u8,
+    /// Bytes in use. Two bytes wide: header blocks pass 255.
+    len: u16,
 }
 
 impl<const N: usize> Default for FixedStr<N> {
@@ -46,7 +47,7 @@ impl<const N: usize> FixedStr<N> {
         }
         let start = self.len as usize;
         self.buf[start..start + n].copy_from_slice(&s.as_bytes()[..n]);
-        self.len += n as u8;
+        self.len += n as u16;
         n == s.len()
     }
 
@@ -151,7 +152,7 @@ impl Cursor<'_> {
     }
 
     fn put_str<const N: usize>(&mut self, s: &FixedStr<N>) -> Option<()> {
-        self.put(&[s.len])?;
+        self.put(&[s.len as u8])?;
         self.put(&s.buf)
     }
 }
@@ -189,7 +190,7 @@ impl Reader<'_> {
         }
         let mut f = FixedStr::<N>::new();
         f.buf.copy_from_slice(bytes);
-        f.len = len;
+        f.len = len as u16;
         Some(f)
     }
 }
@@ -381,6 +382,18 @@ mod tests {
         assert_eq!(cfg.snake_best, 0);
         assert!(cfg.device_key.is_empty());
         assert!(cfg.prev_server.is_empty() && cfg.server_trial_until == 0);
+    }
+
+    #[test]
+    fn long_buffers_keep_their_length() {
+        let mut long = FixedStr::<368>::new();
+        for _ in 0..30 {
+            assert!(long.push_str("0123456789"));
+        }
+        assert_eq!(long.len(), 300);
+        assert_eq!(long.as_str().len(), 300);
+        assert!(!long.push_str(&"x".repeat(100)), "past the end is truncated, not wrapped");
+        assert_eq!(long.len(), 368);
     }
 
     #[test]
